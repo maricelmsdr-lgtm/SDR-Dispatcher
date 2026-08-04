@@ -144,6 +144,7 @@
     transition:border-color .12s, background .12s, color .12s;
   }
   .btn-icon:hover{border-color:var(--cyan-dim); color:var(--text);}
+  .cert-current{margin-top:4px; font-size:12px;}
   .btn-primary{
     background:linear-gradient(0deg, var(--cyan), var(--cyan));
     background:var(--cyan);
@@ -458,39 +459,34 @@
       <div class="topbar">
         <div>
           <h1>Today</h1>
-          <div class="date">Tuesday, August 4 2026 — dispatcher: Maria</div>
+          <div class="date" id="dash-date">—</div>
         </div>
         <button class="btn btn-primary" onclick="goTo('report')">Generate daily report</button>
       </div>
 
       <div class="stat-grid">
-        <div class="stat"><div class="stat-label">Jobs</div><div class="stat-value">18</div></div>
-        <div class="stat"><div class="stat-label">Technicians</div><div class="stat-value">6</div></div>
-        <div class="stat"><div class="stat-label">Calls</div><div class="stat-value">42</div></div>
-        <div class="stat"><div class="stat-label">New leads</div><div class="stat-value">11</div></div>
-        <div class="stat warn"><div class="stat-label">Pending</div><div class="stat-value">9</div></div>
-        <div class="stat warn"><div class="stat-label">Warranty</div><div class="stat-value">3</div></div>
-        <div class="stat warn"><div class="stat-label">Unpaid invoices</div><div class="stat-value">7</div></div>
+        <div class="stat"><div class="stat-label">Jobs</div><div class="stat-value" id="dash-jobs">—</div></div>
+        <div class="stat"><div class="stat-label">Technicians</div><div class="stat-value" id="dash-technicians">—</div></div>
+        <div class="stat"><div class="stat-label">Calls</div><div class="stat-value" id="dash-calls">—</div></div>
+        <div class="stat"><div class="stat-label">New leads</div><div class="stat-value" id="dash-leads">—</div></div>
+        <div class="stat warn"><div class="stat-label">Pending</div><div class="stat-value" id="dash-pending">—</div></div>
+        <div class="stat warn"><div class="stat-label">Warranty</div><div class="stat-value" id="dash-warranty">—</div></div>
+        <div class="stat warn"><div class="stat-label">Unpaid invoices</div><div class="stat-value" id="dash-unpaid">—</div></div>
       </div>
 
       <div class="section-title"><span class="pulse"></span>Needs attention</div>
-      <div class="attention">
-        <div class="attn-row" onclick="goTo('dispatch')"><span class="n">3</span><span class="lbl">jobs need follow-up</span><span class="go">view →</span></div>
-        <div class="attn-row" onclick="goTo('calls')"><span class="n">2</span><span class="lbl">missed calls</span><span class="go">view →</span></div>
-        <div class="attn-row" onclick="goTo('leads')"><span class="n">2</span><span class="lbl">leads need callbacks</span><span class="go">view →</span></div>
-        <div class="attn-row" onclick="goTo('debriefs')"><span class="n">1</span><span class="lbl">technician debrief missing — Tech E</span><span class="go">view →</span></div>
-        <div class="attn-row" onclick="goTo('warranty')"><span class="n">2</span><span class="lbl">warranty items pending</span><span class="go">view →</span></div>
+      <div class="attention" id="dash-attention">
+        <div class="attn-row" onclick="goTo('dispatch')"><span class="n" id="dash-attn-jobs-n">0</span><span class="lbl">jobs need follow-up today</span><span class="go">view →</span></div>
+        <div class="attn-row" onclick="goTo('calls')"><span class="n" id="dash-attn-calls-n">0</span><span class="lbl">missed calls</span><span class="go">view →</span></div>
+        <div class="attn-row" onclick="goTo('leads')"><span class="n" id="dash-attn-leads-n">0</span><span class="lbl">leads need callbacks</span><span class="go">view →</span></div>
+        <div class="attn-row" id="dash-attn-debrief-row" onclick="goTo('debriefs')" style="display:none;"><span class="n" id="dash-attn-debrief-n">0</span><span class="lbl" id="dash-attn-debrief-lbl">technician debrief missing</span><span class="go">view →</span></div>
+        <div class="attn-row" onclick="goTo('warranty')"><span class="n" id="dash-attn-warranty-n">0</span><span class="lbl">warranty items pending</span><span class="go">view →</span></div>
       </div>
 
       <div class="section-title">Today's dispatch</div>
       <table class="dispatch">
         <tr><th>Time</th><th>Tech</th><th>Job</th><th>Customer</th><th>Status</th></tr>
-        <tr><td class="time">8:00</td><td>Tech A</td><td class="mono">#1023</td><td>R. Fields</td><td><span class="pill completed">Completed</span></td></tr>
-        <tr><td class="time">9:00</td><td>Tech B</td><td class="mono">#1024</td><td>M. Ochoa</td><td><span class="pill enroute">En route</span></td></tr>
-        <tr><td class="time">9:30</td><td>Tech C</td><td class="mono">#1025</td><td>D. Alvarez</td><td><span class="pill waiting">Waiting</span></td></tr>
-        <tr><td class="time">10:00</td><td>Tech D</td><td class="mono">#1026</td><td>K. Bautista</td><td><span class="pill scheduled">Scheduled</span></td></tr>
-        <tr><td class="time">11:00</td><td>Tech E</td><td class="mono">#1027</td><td>J. Reyes</td><td><span class="pill scheduled">Scheduled</span></td></tr>
-        <tr><td class="time">1:00</td><td>Tech F</td><td class="mono">#1028</td><td>S. Cruz</td><td><span class="pill scheduled">Scheduled</span></td></tr>
+        <tbody id="dash-dispatch-rows"></tbody>
       </table>
     </div>
 
@@ -515,8 +511,11 @@
     <div class="view" id="view-debriefs">
       <div class="module-head">
         <div><h2>Technician end-of-day debrief</h2><div class="module-sub">Each tech's summary of jobs completed today</div></div>
-        <button class="btn" onclick="downloadTableCSV('table-debriefs','tech_debriefs_backup.csv')">⬇ CSV</button>
+        <div style="display:flex; gap:8px;">
+          <button class="btn" onclick="downloadTableCSV('table-debriefs','tech_debriefs_backup.csv')">⬇ CSV</button>
           <button class="btn" onclick="downloadTablePDF('table-debriefs','tech_debriefs_backup.pdf','Tech debriefs')">⬇ PDF</button>
+          <button class="btn btn-primary" onclick="openModal('debrief', true)">+ Add debrief</button>
+        </div>
       </div>
       <div class="table-scroll">
 <table class="data" id="table-debriefs">
@@ -537,7 +536,7 @@
       </div>
       <div class="table-scroll">
 <table class="data" id="table-calls">
-        <tr><th>Time</th><th>Caller</th><th>Type</th><th>Outcome</th><th>Handled by</th><th>Actions</th></tr>
+        <tr><th>Time</th><th>Caller</th><th>Type</th><th>Outcome</th><th>Handled by</th><th>Description</th><th>Actions</th></tr>
       </table>
       </div>
     </div>
@@ -607,7 +606,7 @@
       </div>
       <div class="table-scroll">
 <table class="data" id="table-installs">
-        <tr><th>Customer</th><th>Equipment</th><th>Model no.</th><th>Serial no.</th><th>Install date</th><th>Registration date</th><th>Actions</th></tr>
+        <tr><th>Customer</th><th>Equipment</th><th>Model no.</th><th>Serial no.</th><th>Install date</th><th>Registration date</th><th>Certificate</th><th>Actions</th></tr>
       </table>
       </div>
     </div>
@@ -641,7 +640,7 @@
       </div>
       <div class="table-scroll">
 <table class="data" id="table-jbwarranty">
-        <tr><th>Customer</th><th>Equipment</th><th>Model no.</th><th>Serial no.</th><th>Warranty start</th><th>Warranty length</th><th>Status</th><th>Actions</th></tr>
+        <tr><th>Customer</th><th>Equipment</th><th>Model no.</th><th>Serial no.</th><th>Warranty start</th><th>Warranty length</th><th>Status</th><th>Certificate</th><th>Actions</th></tr>
       </table>
       </div>
     </div>
@@ -728,6 +727,7 @@
           <div class="field"><label>Equipment</label><input type="text" class="eq-equipment" placeholder="e.g. Split-type AC unit" required></div>
           <div class="field"><label>Model no.</label><input type="text" class="eq-model" required></div>
           <div class="field"><label>Serial no.</label><input type="text" class="eq-serial" required></div>
+          <div class="field"><label>Certificate of warranty</label><input type="file" class="eq-certificate" accept=".pdf,.jpg,.jpeg,.png"><div class="cert-current"></div></div>
         </div>
       </div>
       <button type="button" class="btn" onclick="addEquipmentRow()" style="margin-bottom:12px;">+ Add another equipment</button>
@@ -777,7 +777,7 @@
       </div>
       <div class="field-row">
         <div class="field"><label>Job type</label>
-          <select id="dispatch-jobtype"><option>Repair</option><option>Maintenance</option><option>Install</option><option>Warranty</option></select>
+          <select id="dispatch-jobtype"><option>Repair</option><option>Maintenance</option><option>Install</option><option>Warranty</option><option>Electrical</option><option>Plumbing</option><option>HVAC</option></select>
         </div>
         <div class="field"><label>Time</label><input type="time" id="dispatch-time" required></div>
       </div>
@@ -787,6 +787,26 @@
       <div class="modal-actions">
         <button type="button" class="btn" onclick="closeModal('dispatch')">Cancel</button>
         <button type="submit" class="btn btn-primary" data-add-label="Assign job">Assign job</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modal-debrief">
+  <div class="modal">
+    <div class="modal-head"><h3 data-add-label="Add debrief">Add debrief</h3><button class="modal-close" onclick="closeModal('debrief')">&times;</button></div>
+    <form onsubmit="return submitDebrief(event)">
+      <div class="field"><label>Technician</label>
+        <input type="text" id="debrief-tech-input" list="tech-list" placeholder="Type or select technician" required>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Jobs completed</label><input type="number" id="debrief-jobs" min="0" required></div>
+        <div class="field"><label>Date</label><input type="date" id="debrief-date" required></div>
+      </div>
+      <div class="field"><label>Notes</label><textarea id="debrief-notes" placeholder="How the day went, issues, follow-ups needed..."></textarea></div>
+      <div class="modal-actions">
+        <button type="button" class="btn" onclick="closeModal('debrief')">Cancel</button>
+        <button type="submit" class="btn btn-primary" data-add-label="Save debrief">Save debrief</button>
       </div>
     </form>
   </div>
@@ -808,6 +828,7 @@
       <div class="field"><label>Handled by</label>
         <select id="call-handledby"><option>Maria</option><option>Carla</option><option value="—">— (missed)</option></select>
       </div>
+      <div class="field"><label>Description</label><textarea id="call-description" placeholder="What was the call about?"></textarea></div>
       <div class="modal-actions">
         <button type="button" class="btn" onclick="closeModal('call')">Cancel</button>
         <button type="submit" class="btn btn-primary" data-add-label="Save call">Save call</button>
@@ -876,6 +897,7 @@
           <div class="field"><label>Equipment</label><input type="text" class="jbw-equipment" required></div>
           <div class="field"><label>Model no.</label><input type="text" class="jbw-model"></div>
           <div class="field"><label>Serial no.</label><input type="text" class="jbw-serial"></div>
+          <div class="field"><label>Certificate of warranty</label><input type="file" class="jbw-certificate" accept=".pdf,.jpg,.jpeg,.png"><div class="cert-current"></div></div>
         </div>
       </div>
       <button type="button" class="btn" onclick="addJbwarrantyEquipmentRow()" style="margin-bottom:12px;">+ Add another equipment</button>
@@ -949,6 +971,7 @@
   let currentRole = null;
   let currentUserId = null;
   let currentUserEmail = null;
+  let currentFullName = null;
   let authMode = 'login';
 
   const items = document.querySelectorAll('.nav-item');
@@ -995,6 +1018,10 @@
       }
       if(name === 'estimate'){
         const dateField = document.getElementById('estimate-date');
+        if(dateField) dateField.value = new Date().toISOString().slice(0,10);
+      }
+      if(name === 'debrief'){
+        const dateField = document.getElementById('debrief-date');
         if(dateField) dateField.value = new Date().toISOString().slice(0,10);
       }
     }
@@ -1106,6 +1133,7 @@
       document.getElementById('auth-screen').style.display = 'none';
       document.getElementById('app').style.display = 'flex';
       document.getElementById('whoami').textContent = (profile.full_name || currentUserEmail) + ' · ' + currentRole;
+      currentFullName = profile.full_name || null;
       applyRoleUI();
       populateSuggestionLists();
     } else {
@@ -1151,7 +1179,8 @@
   async function loadView(name){
     if(currentRole !== 'dispatcher' && name !== 'report' && name !== 'dashboard') return;
     try{
-      if(name === 'dispatch') await loadDispatch();
+      if(name === 'dashboard') await loadDashboardOverview();
+      else if(name === 'dispatch') await loadDispatch();
       else if(name === 'debriefs') await loadDebriefs();
       else if(name === 'calls') await loadCalls();
       else if(name === 'leads') await loadLeads();
@@ -1170,6 +1199,70 @@
     return {'Scheduled':'scheduled','En route':'enroute','Waiting':'waiting','Completed':'completed'}[v] || 'scheduled';
   }
 
+  async function loadDashboardOverview(){
+    const today = new Date().toISOString().slice(0,10);
+    const dateLabel = new Date().toLocaleDateString('en-US', { weekday:'long', month:'long', day:'numeric', year:'numeric' });
+    const who = currentFullName || currentUserEmail || '';
+    document.getElementById('dash-date').textContent = dateLabel + (who ? ' — dispatcher: ' + who : '');
+
+    const [jobsRes, callsRes, leadsRes, warrantyRes, invoicesRes, debriefsRes] = await Promise.all([
+      db.from('jobs').select('*, customers(first_name,last_name)'),
+      db.from('call_log').select('outcome'),
+      db.from('leads').select('status'),
+      db.from('warranty_claims').select('status'),
+      db.from('invoices').select('status'),
+      db.from('tech_debriefs').select('technician, debrief_date')
+    ]);
+    const jobs = jobsRes.data || [];
+    const calls = callsRes.data || [];
+    const leads = leadsRes.data || [];
+    const warranty = warrantyRes.data || [];
+    const invoices = invoicesRes.data || [];
+    const debriefs = debriefsRes.data || [];
+
+    const technicians = Array.from(new Set(jobs.map(j => j.technician).filter(Boolean)));
+    const todaysJobs = jobs.filter(j => j.scheduled_date === today);
+    const jobsPending = jobs.filter(j => j.status !== 'Completed').length;
+    const missedCalls = calls.filter(c => c.outcome === 'Missed').length;
+    const leadsNeedCallback = leads.filter(l => l.status === 'Needs callback').length;
+    const warrantyPending = warranty.filter(w => w.status === 'Pending').length;
+    const unpaidInvoices = invoices.filter(i => i.status === 'Unpaid').length;
+    const todaysFollowUp = todaysJobs.filter(j => j.status !== 'Completed').length;
+
+    document.getElementById('dash-jobs').textContent = jobs.length;
+    document.getElementById('dash-technicians').textContent = technicians.length;
+    document.getElementById('dash-calls').textContent = calls.length;
+    document.getElementById('dash-leads').textContent = leads.length;
+    document.getElementById('dash-pending').textContent = jobsPending;
+    document.getElementById('dash-warranty').textContent = warrantyPending;
+    document.getElementById('dash-unpaid').textContent = unpaidInvoices;
+
+    document.getElementById('dash-attn-jobs-n').textContent = todaysFollowUp;
+    document.getElementById('dash-attn-calls-n').textContent = missedCalls;
+    document.getElementById('dash-attn-leads-n').textContent = leadsNeedCallback;
+    document.getElementById('dash-attn-warranty-n').textContent = warrantyPending;
+
+    const debriefsToday = new Set(debriefs.filter(d => d.debrief_date === today).map(d => d.technician));
+    const missingDebriefTechs = technicians.filter(t => todaysJobs.some(j => j.technician === t) && !debriefsToday.has(t));
+    const debriefRow = document.getElementById('dash-attn-debrief-row');
+    if(missingDebriefTechs.length > 0){
+      debriefRow.style.display = '';
+      document.getElementById('dash-attn-debrief-n').textContent = missingDebriefTechs.length;
+      document.getElementById('dash-attn-debrief-lbl').textContent = 'technician debrief missing — ' + missingDebriefTechs.join(', ');
+    } else {
+      debriefRow.style.display = 'none';
+    }
+
+    const tbody = document.getElementById('dash-dispatch-rows');
+    if(todaysJobs.length === 0){
+      tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-faint); padding:20px;">No jobs scheduled today</td></tr>';
+    } else {
+      tbody.innerHTML = todaysJobs.map(row =>
+        `<tr><td class="time">—</td><td>${row.technician||'—'}</td><td class="mono">#${row.job_number}</td><td>${custName(row)}</td><td><span class="pill ${dispatchStatusClass(row.status)}">${row.status||'Scheduled'}</span></td></tr>`
+      ).join('');
+    }
+  }
+
   async function loadDispatch(){
     const { data } = await db.from('jobs').select('*, customers(first_name,last_name)').order('created_at', {ascending:false});
     rowCache.jobs = data || [];
@@ -1185,9 +1278,46 @@
     rowCache.debriefs = data || [];
     clearRows('table-debriefs');
     (data||[]).forEach(row => {
-      const html = `<tr><td>${row.technician||'—'}</td><td>${row.jobs_completed ?? '—'}</td><td>${row.notes||'—'}</td><td>${pillSpan('Submitted','paid')}</td><td><button class="btn-icon" onclick="deleteRow('tech_debriefs','${row.id}',loadDebriefs)">Delete</button></td></tr>`;
+      const html = `<tr><td>${row.technician||'—'}</td><td>${row.jobs_completed ?? '—'}</td><td>${row.notes||'—'}</td><td>${pillSpan('Submitted','paid')}</td><td><button class="btn-icon" onclick="editDebrief('${row.id}')">Edit</button> <button class="btn-icon" onclick="deleteRow('tech_debriefs','${row.id}',loadDebriefs)">Delete</button></td></tr>`;
       document.getElementById('table-debriefs').insertAdjacentHTML('beforeend', html);
     });
+  }
+
+  async function submitDebrief(e){
+    e.preventDefault();
+    const f = e.target;
+    const tech = document.getElementById('debrief-tech-input');
+    const jobs = document.getElementById('debrief-jobs');
+    const date = document.getElementById('debrief-date');
+    const notes = document.getElementById('debrief-notes');
+    try{
+      const payload = { technician: tech.value, jobs_completed: parseInt(jobs.value), debrief_date: date.value, notes: notes.value || null };
+      let error;
+      if(editState.debrief){
+        ({ error } = await db.from('tech_debriefs').update(payload).eq('id', editState.debrief));
+      } else {
+        ({ error } = await db.from('tech_debriefs').insert(payload));
+      }
+      if(error) throw error;
+      editState.debrief = null;
+      f.reset(); closeModal('debrief'); showToast('Debrief saved'); await loadDebriefs();
+    } catch(err){ alert(err.message); }
+    return false;
+  }
+
+  function editDebrief(id){
+    const row = findCached('debriefs', id);
+    if(!row) return;
+    editState.debrief = id;
+    document.getElementById('debrief-tech-input').value = row.technician || '';
+    document.getElementById('debrief-jobs').value = row.jobs_completed ?? '';
+    document.getElementById('debrief-date').value = row.debrief_date || '';
+    document.getElementById('debrief-notes').value = row.notes || '';
+    const h3 = document.querySelector('#modal-debrief .modal-head h3');
+    if(h3) h3.textContent = 'Edit debrief';
+    const btn = document.querySelector('#modal-debrief button[type=submit]');
+    if(btn) btn.textContent = 'Save changes';
+    openModal('debrief');
   }
 
   async function loadCalls(){
@@ -1196,7 +1326,7 @@
     clearRows('table-calls');
     (data||[]).forEach(row => {
       const statusCls = row.outcome === 'Answered' ? 'paid' : 'unpaid';
-      const html = `<tr><td class="mono">${fmtTime(row.call_time)}</td><td>${row.caller||'—'}</td><td>${row.direction||'—'}</td><td>${pillSpan(row.outcome, statusCls)}</td><td>${row.handled_by||'—'}</td><td><button class="btn-icon" onclick="editCall('${row.id}')">Edit</button> <button class="btn-icon" onclick="deleteRow('call_log','${row.id}',loadCalls)">Delete</button></td></tr>`;
+      const html = `<tr><td class="mono">${fmtTime(row.call_time)}</td><td>${row.caller||'—'}</td><td>${row.direction||'—'}</td><td>${pillSpan(row.outcome, statusCls)}</td><td>${row.handled_by||'—'}</td><td>${row.description||'—'}</td><td><button class="btn-icon" onclick="editCall('${row.id}')">Edit</button> <button class="btn-icon" onclick="deleteRow('call_log','${row.id}',loadCalls)">Delete</button></td></tr>`;
       document.getElementById('table-calls').insertAdjacentHTML('beforeend', html);
     });
   }
@@ -1260,7 +1390,8 @@
     rowCache.installs = data || [];
     clearRows('table-installs');
     (data||[]).forEach(row => {
-      const html = `<tr><td>${custName(row)}</td><td>${row.equipment||'—'}</td><td class="mono">${row.model||'—'}</td><td class="mono">${row.serial||'—'}</td><td class="mono">${fmtDate(row.install_date)}</td><td class="mono">${fmtDate(row.registration_date)}</td><td><button class="btn-icon" onclick="editInstall('${row.id}')">Edit</button> <button class="btn-icon" onclick="deleteRow('installations','${row.id}',loadInstalls)">Delete</button></td></tr>`;
+      const cert = row.certificate_url ? `<a href="${row.certificate_url}" target="_blank" style="color:var(--cyan);">View</a>` : '—';
+      const html = `<tr><td>${custName(row)}</td><td>${row.equipment||'—'}</td><td class="mono">${row.model||'—'}</td><td class="mono">${row.serial||'—'}</td><td class="mono">${fmtDate(row.install_date)}</td><td class="mono">${fmtDate(row.registration_date)}</td><td>${cert}</td><td><button class="btn-icon" onclick="editInstall('${row.id}')">Edit</button> <button class="btn-icon" onclick="deleteRow('installations','${row.id}',loadInstalls)">Delete</button></td></tr>`;
       document.getElementById('table-installs').insertAdjacentHTML('beforeend', html);
     });
   }
@@ -1283,7 +1414,8 @@
     (data||[]).forEach(row => {
       const active = (row.warranty_start_year + row.warranty_length_years) > new Date().getFullYear();
       const statusHtml = active ? pillSpan('Active','paid') : pillSpan('Expired','unpaid');
-      const html = `<tr><td>${custName(row)}</td><td>${row.equipment||'—'}</td><td>${row.model||'—'}</td><td>${row.serial||'—'}</td><td class="mono">${row.warranty_start_year}</td><td>${row.warranty_length_years} years</td><td>${statusHtml}</td><td><button class="btn-icon" onclick="editJbwarranty('${row.id}')">Edit</button> <button class="btn-icon" onclick="deleteRow('jb_warranty_clients','${row.id}',loadJbwarranty)">Delete</button></td></tr>`;
+      const cert = row.certificate_url ? `<a href="${row.certificate_url}" target="_blank" style="color:var(--cyan);">View</a>` : '—';
+      const html = `<tr><td>${custName(row)}</td><td>${row.equipment||'—'}</td><td>${row.model||'—'}</td><td>${row.serial||'—'}</td><td class="mono">${row.warranty_start_year}</td><td>${row.warranty_length_years} years</td><td>${statusHtml}</td><td>${cert}</td><td><button class="btn-icon" onclick="editJbwarranty('${row.id}')">Edit</button> <button class="btn-icon" onclick="deleteRow('jb_warranty_clients','${row.id}',loadJbwarranty)">Delete</button></td></tr>`;
       document.getElementById('table-jbwarranty').insertAdjacentHTML('beforeend', html);
     });
   }
@@ -1399,9 +1531,20 @@
       <div class="field"><label>Equipment</label><input type="text" class="eq-equipment" placeholder="e.g. Split-type AC unit" required></div>
       <div class="field"><label>Model no.</label><input type="text" class="eq-model" required></div>
       <div class="field"><label>Serial no.</label><input type="text" class="eq-serial" required></div>
+      <div class="field"><label>Certificate of warranty</label><input type="file" class="eq-certificate" accept=".pdf,.jpg,.jpeg,.png"><div class="cert-current"></div></div>
       <button type="button" class="btn" onclick="this.parentElement.remove()" style="align-self:center;">Remove</button>
     `;
     rows.appendChild(row);
+  }
+
+  async function uploadCertificate(file, folder){
+    if(!file) return null;
+    const safeName = file.name.replace(/[^a-zA-Z0-9.\-_]/g, '_');
+    const path = `${folder}/${Date.now()}-${Math.random().toString(36).slice(2,8)}-${safeName}`;
+    const { error } = await db.storage.from('certificates').upload(path, file);
+    if(error) throw error;
+    const { data } = db.storage.from('certificates').getPublicUrl(path);
+    return data.publicUrl;
   }
 
   async function submitInstall(e){
@@ -1415,6 +1558,7 @@
       const customer_id = await findOrCreateCustomer(customer.value);
       if(editState.install){
         const row = equipmentRows[0];
+        const file = row.querySelector('.eq-certificate').files[0];
         const payload = {
           customer_id,
           equipment: row.querySelector('.eq-equipment').value,
@@ -1423,6 +1567,7 @@
           install_date: installDate.value || null,
           registration_date: regDate.value || null
         };
+        if(file) payload.certificate_url = await uploadCertificate(file, 'installations');
         const { error } = await db.from('installations').update(payload).eq('id', editState.install);
         if(error) throw error;
         editState.install = null;
@@ -1431,12 +1576,15 @@
           const equipment = row.querySelector('.eq-equipment').value;
           const model = row.querySelector('.eq-model').value;
           const serial = row.querySelector('.eq-serial').value;
-          const { error } = await db.from('installations').insert({ customer_id, equipment, model, serial, install_date: installDate.value || null, registration_date: regDate.value || null });
+          const file = row.querySelector('.eq-certificate').files[0];
+          const certificate_url = await uploadCertificate(file, 'installations');
+          const { error } = await db.from('installations').insert({ customer_id, equipment, model, serial, install_date: installDate.value || null, registration_date: regDate.value || null, certificate_url });
           if(error) throw error;
         }
       }
       f.reset();
       document.getElementById('equipment-rows').querySelectorAll('.equipment-row').forEach((r,i) => { if(i > 0) r.remove(); });
+      document.querySelectorAll('#equipment-rows .cert-current').forEach(d => d.innerHTML = '');
       closeModal('install'); showToast('Installation saved'); await loadInstalls();
     } catch(err){ alert(err.message); }
     return false;
@@ -1453,6 +1601,8 @@
     document.querySelector('.eq-serial').value = row.serial || '';
     document.getElementById('install-date').value = row.install_date || '';
     document.getElementById('install-regdate').value = row.registration_date || '';
+    const certDiv = document.querySelector('#equipment-rows .cert-current');
+    certDiv.innerHTML = row.certificate_url ? `<a href="${row.certificate_url}" target="_blank" style="color:var(--cyan);font-size:12px;">View current certificate</a>` : '';
     const h3 = document.querySelector('#modal-install .modal-head h3');
     if(h3) h3.textContent = 'Edit installation';
     const btn = document.querySelector('#modal-install button[type=submit]');
@@ -1546,9 +1696,10 @@
     const direction = document.getElementById('call-direction');
     const outcome = document.getElementById('call-outcome');
     const handledBy = document.getElementById('call-handledby');
+    const description = document.getElementById('call-description');
     const handled_by = outcome.value === 'Missed' ? null : handledBy.value;
     try{
-      const payload = { caller: caller.value, direction: direction.value, outcome: outcome.value, handled_by };
+      const payload = { caller: caller.value, direction: direction.value, outcome: outcome.value, handled_by, description: description.value || null };
       let error;
       if(editState.call){
         ({ error } = await db.from('call_log').update(payload).eq('id', editState.call));
@@ -1570,6 +1721,7 @@
     document.getElementById('call-direction').value = row.direction || 'Inbound';
     document.getElementById('call-outcome').value = row.outcome || 'Answered';
     document.getElementById('call-handledby').value = row.handled_by || 'Maria';
+    document.getElementById('call-description').value = row.description || '';
     const h3 = document.querySelector('#modal-call .modal-head h3');
     if(h3) h3.textContent = 'Edit call';
     const btn = document.querySelector('#modal-call button[type=submit]');
@@ -1670,6 +1822,7 @@
       <div class="field"><label>Equipment</label><input type="text" class="jbw-equipment" required></div>
       <div class="field"><label>Model no.</label><input type="text" class="jbw-model"></div>
       <div class="field"><label>Serial no.</label><input type="text" class="jbw-serial"></div>
+      <div class="field"><label>Certificate of warranty</label><input type="file" class="jbw-certificate" accept=".pdf,.jpg,.jpeg,.png"><div class="cert-current"></div></div>
       <button type="button" class="btn" onclick="this.parentElement.remove()" style="align-self:center;">Remove</button>
     `;
     rows.appendChild(row);
@@ -1686,6 +1839,7 @@
       const customer_id = await findOrCreateCustomer(customer.value);
       if(editState.jbwarranty){
         const row = equipmentRows[0];
+        const file = row.querySelector('.jbw-certificate').files[0];
         const payload = {
           customer_id,
           equipment: row.querySelector('.jbw-equipment').value,
@@ -1694,6 +1848,7 @@
           warranty_start_year: parseInt(startYear.value),
           warranty_length_years: parseInt(length.value)
         };
+        if(file) payload.certificate_url = await uploadCertificate(file, 'jb_warranty');
         const { error } = await db.from('jb_warranty_clients').update(payload).eq('id', editState.jbwarranty);
         if(error) throw error;
         editState.jbwarranty = null;
@@ -1702,16 +1857,20 @@
           const equipment = row.querySelector('.jbw-equipment').value;
           const model = row.querySelector('.jbw-model').value;
           const serial = row.querySelector('.jbw-serial').value;
+          const file = row.querySelector('.jbw-certificate').files[0];
+          const certificate_url = await uploadCertificate(file, 'jb_warranty');
           const { error } = await db.from('jb_warranty_clients').insert({
             customer_id, equipment, model, serial,
             warranty_start_year: parseInt(startYear.value),
-            warranty_length_years: parseInt(length.value)
+            warranty_length_years: parseInt(length.value),
+            certificate_url
           });
           if(error) throw error;
         }
       }
       f.reset();
       document.getElementById('jbwarranty-equipment-rows').querySelectorAll('.equipment-row').forEach((r,i) => { if(i > 0) r.remove(); });
+      document.querySelectorAll('#jbwarranty-equipment-rows .cert-current').forEach(d => d.innerHTML = '');
       closeModal('jbwarranty'); showToast('Client saved'); await loadJbwarranty();
     } catch(err){ alert(err.message); }
     return false;
@@ -1728,6 +1887,8 @@
     document.querySelector('.jbw-serial').value = row.serial || '';
     document.getElementById('jbwarranty-startyear').value = row.warranty_start_year || '';
     document.getElementById('jbwarranty-length').value = row.warranty_length_years || '';
+    const certDiv = document.querySelector('#jbwarranty-equipment-rows .cert-current');
+    certDiv.innerHTML = row.certificate_url ? `<a href="${row.certificate_url}" target="_blank" style="color:var(--cyan);font-size:12px;">View current certificate</a>` : '';
     const h3 = document.querySelector('#modal-jbwarranty .modal-head h3');
     if(h3) h3.textContent = 'Edit JB warranty client';
     const btn = document.querySelector('#modal-jbwarranty button[type=submit]');
@@ -1839,7 +2000,7 @@
     const leadsData = leads.data || [];
     const leads_won = leadsData.filter(l => l.status === 'Booked').length;
 
-    const jobTypes = ['Repair','Maintenance','Install','Warranty'];
+    const jobTypes = ['Repair','Maintenance','Install','Warranty','Electrical','Plumbing','HVAC'];
     const jobs_by_type = {};
     jobTypes.forEach(t => { jobs_by_type[t] = jobsData.filter(j => j.job_type === t && j.status === 'Completed').length; });
 
@@ -1873,7 +2034,7 @@
 
   function renderReportBlocks(r){
     const jobsByType = r.jobs_by_type || {};
-    const jobTypeRows = ['Repair','Maintenance','Install','Warranty'].map(t =>
+    const jobTypeRows = ['Repair','Maintenance','Install','Warranty','Electrical','Plumbing','HVAC'].map(t =>
       `<div class="report-line"><span>${t}</span><span>${jobsByType[t] ?? 0}</span></div>`
     ).join('');
     return `
