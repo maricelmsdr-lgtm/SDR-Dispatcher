@@ -703,7 +703,7 @@
       <div class="field"><label>Reason</label><input type="text" id="callback-reason" required></div>
       <div class="field-row">
         <div class="field"><label>Assigned to</label>
-          <select id="callback-assignee"><option>Maria</option><option>Carla</option></select>
+          <select id="callback-assignee"><option>Mari</option><option>Nicki</option><option>Shawn</option></select>
         </div>
         <div class="field"><label>Status</label>
           <select id="callback-status"><option>Pending</option><option>Completed</option></select>
@@ -831,7 +831,7 @@
         </div>
       </div>
       <div class="field"><label>Handled by</label>
-        <select id="call-handledby"><option>Maria</option><option>Carla</option><option value="—">— (missed)</option></select>
+        <select id="call-handledby"><option>Mari</option><option>Nicki</option><option>Shawn</option><option value="—">— (missed)</option></select>
       </div>
       <div class="field"><label>Description</label><textarea id="call-description" placeholder="What was the call about?"></textarea></div>
       <div class="modal-actions">
@@ -1741,7 +1741,7 @@
     document.getElementById('call-phone').value = row.phone || '';
     document.getElementById('call-direction').value = row.direction || 'Inbound';
     document.getElementById('call-outcome').value = row.outcome || 'Answered';
-    document.getElementById('call-handledby').value = row.handled_by || 'Maria';
+    document.getElementById('call-handledby').value = row.handled_by || 'Mari';
     document.getElementById('call-description').value = row.description || '';
     if(row.call_time){
       document.getElementById('call-time').value = row.call_time.slice(11,16);
