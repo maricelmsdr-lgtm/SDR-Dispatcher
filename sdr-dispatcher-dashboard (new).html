@@ -502,7 +502,7 @@
       </div>
       <div class="table-scroll">
 <table class="data" id="table-dispatch">
-        <tr><th>Job</th><th>Tech</th><th>Customer</th><th>Type</th><th>Time</th><th>Status</th><th>Actions</th></tr>
+        <tr><th>Job</th><th>Tech</th><th>Customer</th><th>Type</th><th>Description</th><th>Time</th><th>Status</th><th>Actions</th></tr>
       </table>
       </div>
     </div>
@@ -536,7 +536,7 @@
       </div>
       <div class="table-scroll">
 <table class="data" id="table-calls">
-        <tr><th>Time</th><th>Caller</th><th>Type</th><th>Outcome</th><th>Handled by</th><th>Description</th><th>Actions</th></tr>
+        <tr><th>Time</th><th>Caller</th><th>Phone</th><th>Type</th><th>Outcome</th><th>Handled by</th><th>Description</th><th>Actions</th></tr>
       </table>
       </div>
     </div>
@@ -674,7 +674,7 @@
       </div>
       <div class="table-scroll">
 <table class="data" id="table-invoices">
-        <tr><th>Invoice</th><th>Customer</th><th>Category</th><th>Job</th><th>Amount</th><th>Status</th><th>Actions</th></tr>
+        <tr><th>Invoice</th><th>Customer</th><th>Category</th><th>Job</th><th>Amount</th><th>Status</th><th>Notes</th><th>Actions</th></tr>
       </table>
       </div>
     </div>
@@ -784,6 +784,7 @@
       <div class="field"><label>Status</label>
         <select id="dispatch-status"><option>Scheduled</option><option>En route</option><option>Waiting</option><option>Completed</option></select>
       </div>
+      <div class="field"><label>Description</label><textarea id="dispatch-description" placeholder="Job details, what needs to be done..."></textarea></div>
       <div class="modal-actions">
         <button type="button" class="btn" onclick="closeModal('dispatch')">Cancel</button>
         <button type="submit" class="btn btn-primary" data-add-label="Assign job">Assign job</button>
@@ -817,6 +818,10 @@
     <div class="modal-head"><h3 data-add-label="Log call">Log call</h3><button class="modal-close" onclick="closeModal('call')">&times;</button></div>
     <form onsubmit="return submitCall(event)">
       <div class="field"><label>Caller</label><input type="text" id="call-caller" placeholder="Name or 'Unknown'" required></div>
+      <div class="field-row">
+        <div class="field"><label>Phone number</label><input type="tel" id="call-phone" placeholder="(555) 123-4567"></div>
+        <div class="field"><label>Time</label><input type="time" id="call-time" required></div>
+      </div>
       <div class="field-row">
         <div class="field"><label>Direction</label>
           <select id="call-direction"><option>Inbound</option><option>Outbound</option></select>
@@ -942,7 +947,7 @@
     <form onsubmit="return submitInvoice(event)">
       <div class="field"><label>Customer name</label><input type="text" id="invoice-customer" required></div>
       <div class="field"><label>Category</label>
-        <select id="invoice-category"><option>PMA/Service Plan</option><option>Installation</option><option>New Construction</option><option>Small Job</option><option>Service Call/Repair</option></select>
+        <select id="invoice-category"><option>PMA/Service Plan</option><option>Installation</option><option>New Construction</option><option>Small Job</option><option>Service Call/Repair</option><option>Electrical</option><option>Plumbing</option><option>HVAC</option></select>
       </div>
       <div class="field-row">
         <div class="field"><label>Amount ($)</label><input type="number" step="0.01" id="invoice-amount" required></div>
@@ -950,6 +955,7 @@
           <select id="invoice-status"><option>Unpaid</option><option>Paid</option></select>
         </div>
       </div>
+      <div class="field"><label>Description / notes</label><textarea id="invoice-notes" placeholder="optional"></textarea></div>
       <div class="modal-actions">
         <button type="button" class="btn" onclick="closeModal('invoice')">Cancel</button>
         <button type="submit" class="btn btn-primary" data-add-label="Save invoice">Save invoice</button>
@@ -1023,6 +1029,10 @@
       if(name === 'debrief'){
         const dateField = document.getElementById('debrief-date');
         if(dateField) dateField.value = new Date().toISOString().slice(0,10);
+      }
+      if(name === 'call'){
+        const timeField = document.getElementById('call-time');
+        if(timeField) timeField.value = new Date().toTimeString().slice(0,5);
       }
     }
     document.getElementById('modal-' + name).classList.add('active');
@@ -1268,7 +1278,7 @@
     rowCache.jobs = data || [];
     clearRows('table-dispatch');
     (data||[]).forEach(row => {
-      const html = `<tr><td class="mono">#${row.job_number}</td><td>${row.technician||'—'}</td><td>${custName(row)}</td><td>${row.job_type||'—'}</td><td class="mono">${fmtDate(row.scheduled_date)}</td><td>${pillSpan(row.status, dispatchStatusClass(row.status))}</td><td><button class="btn-icon" onclick="editJob('${row.id}')">Edit</button> <button class="btn-icon" onclick="deleteRow('jobs','${row.id}',loadDispatch)">Delete</button></td></tr>`;
+      const html = `<tr><td class="mono">#${row.job_number}</td><td>${row.technician||'—'}</td><td>${custName(row)}</td><td>${row.job_type||'—'}</td><td>${row.description||'—'}</td><td class="mono">${fmtDate(row.scheduled_date)}</td><td>${pillSpan(row.status, dispatchStatusClass(row.status))}</td><td><button class="btn-icon" onclick="editJob('${row.id}')">Edit</button> <button class="btn-icon" onclick="deleteRow('jobs','${row.id}',loadDispatch)">Delete</button></td></tr>`;
       document.getElementById('table-dispatch').insertAdjacentHTML('beforeend', html);
     });
   }
@@ -1326,7 +1336,7 @@
     clearRows('table-calls');
     (data||[]).forEach(row => {
       const statusCls = row.outcome === 'Answered' ? 'paid' : 'unpaid';
-      const html = `<tr><td class="mono">${fmtTime(row.call_time)}</td><td>${row.caller||'—'}</td><td>${row.direction||'—'}</td><td>${pillSpan(row.outcome, statusCls)}</td><td>${row.handled_by||'—'}</td><td>${row.description||'—'}</td><td><button class="btn-icon" onclick="editCall('${row.id}')">Edit</button> <button class="btn-icon" onclick="deleteRow('call_log','${row.id}',loadCalls)">Delete</button></td></tr>`;
+      const html = `<tr><td class="mono">${fmtTime(row.call_time)}</td><td>${row.caller||'—'}</td><td class="mono">${row.phone||'—'}</td><td>${row.direction||'—'}</td><td>${pillSpan(row.outcome, statusCls)}</td><td>${row.handled_by||'—'}</td><td>${row.description||'—'}</td><td><button class="btn-icon" onclick="editCall('${row.id}')">Edit</button> <button class="btn-icon" onclick="deleteRow('call_log','${row.id}',loadCalls)">Delete</button></td></tr>`;
       document.getElementById('table-calls').insertAdjacentHTML('beforeend', html);
     });
   }
@@ -1436,7 +1446,7 @@
     clearRows('table-invoices');
     (data||[]).forEach(row => {
       const statusCls = row.status === 'Paid' ? 'paid' : 'unpaid';
-      const html = `<tr><td class="mono">INV-${row.invoice_number}</td><td>${custName(row)}</td><td>${row.category||'—'}</td><td class="mono">—</td><td class="mono">$${Number(row.amount||0).toLocaleString()}</td><td>${pillSpan(row.status, statusCls)}</td><td><button class="btn-icon" onclick="editInvoice('${row.id}')">Edit</button> <button class="btn-icon" onclick="deleteRow('invoices','${row.id}',loadInvoices)">Delete</button></td></tr>`;
+      const html = `<tr><td class="mono">INV-${row.invoice_number}</td><td>${custName(row)}</td><td>${row.category||'—'}</td><td class="mono">—</td><td class="mono">$${Number(row.amount||0).toLocaleString()}</td><td>${pillSpan(row.status, statusCls)}</td><td>${row.notes||'—'}</td><td><button class="btn-icon" onclick="editInvoice('${row.id}')">Edit</button> <button class="btn-icon" onclick="deleteRow('invoices','${row.id}',loadInvoices)">Delete</button></td></tr>`;
       document.getElementById('table-invoices').insertAdjacentHTML('beforeend', html);
     });
   }
@@ -1657,10 +1667,11 @@
     const tech = document.getElementById('dispatch-tech-input');
     const type = document.getElementById('dispatch-jobtype');
     const status = document.getElementById('dispatch-status');
+    const description = document.getElementById('dispatch-description');
     const scheduled_date = new Date().toISOString().slice(0,10);
     try{
       const customer_id = await findOrCreateCustomer(customer.value);
-      const payload = { customer_id, technician: tech.value, job_type: type.value, status: status.value, scheduled_date };
+      const payload = { customer_id, technician: tech.value, job_type: type.value, status: status.value, scheduled_date, description: description.value || null };
       let error;
       if(editState.dispatch){
         ({ error } = await db.from('jobs').update(payload).eq('id', editState.dispatch));
@@ -1682,6 +1693,7 @@
     document.getElementById('dispatch-tech-input').value = row.technician || '';
     document.getElementById('dispatch-jobtype').value = row.job_type || 'Repair';
     document.getElementById('dispatch-status').value = row.status || 'Scheduled';
+    document.getElementById('dispatch-description').value = row.description || '';
     const h3 = document.querySelector('#modal-dispatch .modal-head h3');
     if(h3) h3.textContent = 'Edit job';
     const btn = document.querySelector('#modal-dispatch button[type=submit]');
@@ -1693,13 +1705,21 @@
     e.preventDefault();
     const f = e.target;
     const caller = document.getElementById('call-caller');
+    const phone = document.getElementById('call-phone');
+    const timeField = document.getElementById('call-time');
     const direction = document.getElementById('call-direction');
     const outcome = document.getElementById('call-outcome');
     const handledBy = document.getElementById('call-handledby');
     const description = document.getElementById('call-description');
     const handled_by = outcome.value === 'Missed' ? null : handledBy.value;
     try{
-      const payload = { caller: caller.value, direction: direction.value, outcome: outcome.value, handled_by, description: description.value || null };
+      let datePart = new Date().toISOString().slice(0,10);
+      if(editState.call){
+        const existing = findCached('calls', editState.call);
+        if(existing && existing.call_time) datePart = existing.call_time.slice(0,10);
+      }
+      const call_time = `${datePart}T${timeField.value}:00`;
+      const payload = { caller: caller.value, phone: phone.value || null, call_time, direction: direction.value, outcome: outcome.value, handled_by, description: description.value || null };
       let error;
       if(editState.call){
         ({ error } = await db.from('call_log').update(payload).eq('id', editState.call));
@@ -1718,10 +1738,14 @@
     if(!row) return;
     editState.call = id;
     document.getElementById('call-caller').value = row.caller || '';
+    document.getElementById('call-phone').value = row.phone || '';
     document.getElementById('call-direction').value = row.direction || 'Inbound';
     document.getElementById('call-outcome').value = row.outcome || 'Answered';
     document.getElementById('call-handledby').value = row.handled_by || 'Maria';
     document.getElementById('call-description').value = row.description || '';
+    if(row.call_time){
+      document.getElementById('call-time').value = row.call_time.slice(11,16);
+    }
     const h3 = document.querySelector('#modal-call .modal-head h3');
     if(h3) h3.textContent = 'Edit call';
     const btn = document.querySelector('#modal-call button[type=submit]');
@@ -1941,9 +1965,10 @@
     const category = document.getElementById('invoice-category');
     const amount = document.getElementById('invoice-amount');
     const status = document.getElementById('invoice-status');
+    const notes = document.getElementById('invoice-notes');
     try{
       const customer_id = await findOrCreateCustomer(customer.value);
-      const payload = { customer_id, category: category.value, amount: parseFloat(amount.value), status: status.value, invoice_date: new Date().toISOString().slice(0,10) };
+      const payload = { customer_id, category: category.value, amount: parseFloat(amount.value), status: status.value, invoice_date: new Date().toISOString().slice(0,10), notes: notes.value || null };
       let error;
       if(editState.invoice){
         ({ error } = await db.from('invoices').update(payload).eq('id', editState.invoice));
@@ -1965,6 +1990,7 @@
     document.getElementById('invoice-category').value = row.category || 'PMA/Service Plan';
     document.getElementById('invoice-amount').value = row.amount ?? '';
     document.getElementById('invoice-status').value = row.status || 'Unpaid';
+    document.getElementById('invoice-notes').value = row.notes || '';
     const h3 = document.querySelector('#modal-invoice .modal-head h3');
     if(h3) h3.textContent = 'Edit invoice';
     const btn = document.querySelector('#modal-invoice button[type=submit]');
