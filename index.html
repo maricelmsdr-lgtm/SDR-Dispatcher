@@ -469,6 +469,7 @@
       <li class="nav-item" data-view="dispatch"><span class="dot"></span>Dispatch board</li>
       <li class="nav-item" data-view="debriefs"><span class="dot"></span>Tech debriefs</li>
       <li class="nav-item" data-view="calls"><span class="dot"></span>Call log</li>
+      <li class="nav-item" data-view="kpi"><span class="dot"></span>KPI tracking</li>
       <li class="nav-item" data-view="leads"><span class="dot"></span>Leads</li>
       <li class="nav-item" data-view="estimates"><span class="dot"></span>Estimates</li>
       <li class="nav-item" data-view="callbacks"><span class="dot"></span>Callbacks</li>
@@ -591,7 +592,7 @@
 
       <div class="table-scroll">
 <table class="data" id="table-calls">
-        <tr><th>Time</th><th>Caller</th><th>Phone</th><th>Type</th><th>Priority</th><th>Outcome</th><th>Handled by</th><th>Description</th><th>Actions</th></tr>
+        <tr><th>Date</th><th>Time</th><th>Caller</th><th>Phone</th><th>Type</th><th>Priority</th><th>Outcome</th><th>Handled by</th><th>Description</th><th>Status</th><th>Actions</th></tr>
       </table>
       </div>
     </div>
@@ -745,6 +746,19 @@
       </div>
     </div>
 
+    <!-- ============ KPI TRACKING ============ -->
+    <div class="view" id="view-kpi">
+      <div class="module-head">
+        <div><h2>KPI tracking</h2><div class="module-sub">Weekly leading &amp; lagging indicators — auto-calculated where possible, entered manually otherwise</div></div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn" onclick="downloadTableCSV('table-kpi','kpi_tracking.csv')">⬇ CSV</button>
+        </div>
+      </div>
+      <div class="table-scroll">
+        <table class="data" id="table-kpi"></table>
+      </div>
+    </div>
+
   </div>
 </div>
 
@@ -873,8 +887,9 @@
     <div class="modal-head"><h3 data-add-label="Log call">Log call</h3><button class="modal-close" onclick="closeModal('call')">&times;</button></div>
     <form onsubmit="return submitCall(event)">
       <div class="field"><label>Caller</label><input type="text" id="call-caller" placeholder="Name or 'Unknown'" required></div>
+      <div class="field"><label>Phone number</label><input type="tel" id="call-phone" placeholder="(555) 123-4567"></div>
       <div class="field-row">
-        <div class="field"><label>Phone number</label><input type="tel" id="call-phone" placeholder="(555) 123-4567"></div>
+        <div class="field"><label>Date</label><input type="date" id="call-date" required></div>
         <div class="field"><label>Time</label><input type="time" id="call-time" required></div>
       </div>
       <div class="field-row">
@@ -892,6 +907,10 @@
         <select id="call-handledby"><option>Mari</option><option>Nicki</option><option>Shawn</option><option>AI</option><option value="—">— (missed)</option></select>
       </div>
       <div class="field"><label>Description</label><textarea id="call-description" placeholder="What was the call about?"></textarea></div>
+      <div class="field"><label>Note / Status</label>
+        <select id="call-status"><option>Open</option><option>Follow-up needed</option><option>Resolved</option><option>Escalated</option></select>
+        <textarea id="call-note" placeholder="Optional note..." style="margin-top:8px;"></textarea>
+      </div>
       <div class="modal-actions">
         <button type="button" class="btn" onclick="closeModal('call')">Cancel</button>
         <button type="submit" class="btn btn-primary" data-add-label="Save call">Save call</button>
@@ -1091,6 +1110,8 @@
       if(name === 'call'){
         const timeField = document.getElementById('call-time');
         if(timeField) timeField.value = new Date().toTimeString().slice(0,5);
+        const dateField = document.getElementById('call-date');
+        if(dateField) dateField.value = new Date().toISOString().slice(0,10);
       }
     }
     document.getElementById('modal-' + name).classList.add('active');
@@ -1245,7 +1266,7 @@
   }
 
   async function loadView(name){
-    const bossAllowedViews = ['report', 'dashboard', 'installs', 'jbwarranty', 'serviceplans', 'calls'];
+    const bossAllowedViews = ['report', 'dashboard', 'installs', 'jbwarranty', 'serviceplans', 'calls', 'kpi'];
     if(currentRole !== 'dispatcher' && !bossAllowedViews.includes(name)) return;
     try{
       if(name === 'dashboard') await loadDashboardOverview();
@@ -1261,6 +1282,7 @@
       else if(name === 'serviceplans') await loadServiceplans();
       else if(name === 'invoices') await loadInvoices();
       else if(name === 'report') await loadReport();
+      else if(name === 'kpi') await loadKPI();
     } catch(err){ console.error('loadView error', name, err); }
   }
 
@@ -1446,7 +1468,7 @@
   function filterCallsBySearch(rows){
     if(!callFilter.search) return rows;
     const q = callFilter.search;
-    return rows.filter(r => [r.caller, r.phone, r.description, r.handled_by].some(v => (v||'').toLowerCase().includes(q)));
+    return rows.filter(r => [r.caller, r.phone, r.description, r.handled_by, r.status, r.note].some(v => (v||'').toLowerCase().includes(q)));
   }
 
   async function refreshCallLog(){
@@ -1477,14 +1499,14 @@
   function renderCallsTable(rows){
     clearRows('table-calls');
     if(!rows.length){
-      document.getElementById('table-calls').insertAdjacentHTML('beforeend', `<tr><td colspan="9" style="text-align:center; color:var(--text-faint); padding:22px;">No calls found for this range.</td></tr>`);
+      document.getElementById('table-calls').insertAdjacentHTML('beforeend', `<tr><td colspan="11" style="text-align:center; color:var(--text-faint); padding:22px;">No calls found for this range.</td></tr>`);
       return;
     }
     rows.forEach(row => {
       const statusCls = row.outcome === 'Answered' ? 'paid' : 'unpaid';
       const priority = row.priority || 'Standard';
       const priorityHtml = priority === 'Emergency' ? pillSpan('Emergency','unpaid') : pillSpan('Standard','scheduled');
-      const html = `<tr><td class="mono">${fmtTime(row.call_time)}</td><td>${row.caller||'—'}</td><td class="mono">${row.phone||'—'}</td><td>${row.direction||'—'}</td><td>${priorityHtml}</td><td>${pillSpan(row.outcome, statusCls)}</td><td>${row.handled_by||'—'}</td><td>${row.description||'—'}</td><td><button class="btn-icon" onclick="editCall('${row.id}')">Edit</button> <button class="btn-icon" onclick="deleteRow('call_log','${row.id}',refreshCallLog)">Delete</button></td></tr>`;
+      const html = `<tr><td class="mono">${row.call_time ? fmtDate(row.call_time.slice(0,10)) : '—'}</td><td class="mono">${fmtTime(row.call_time)}</td><td>${row.caller||'—'}</td><td class="mono">${row.phone||'—'}</td><td>${row.direction||'—'}</td><td>${priorityHtml}</td><td>${pillSpan(row.outcome, statusCls)}</td><td>${row.handled_by||'—'}</td><td>${row.description||'—'}</td><td${row.note ? ` title="${row.note.replace(/"/g,'&quot;')}"` : ''}>${row.status||'—'}</td><td><button class="btn-icon" onclick="editCall('${row.id}')">Edit</button> <button class="btn-icon" onclick="deleteRow('call_log','${row.id}',refreshCallLog)">Delete</button></td></tr>`;
       document.getElementById('table-calls').insertAdjacentHTML('beforeend', html);
     });
   }
@@ -1881,21 +1903,20 @@
     const f = e.target;
     const caller = document.getElementById('call-caller');
     const phone = document.getElementById('call-phone');
+    const dateField = document.getElementById('call-date');
     const timeField = document.getElementById('call-time');
     const direction = document.getElementById('call-direction');
     const outcome = document.getElementById('call-outcome');
     const handledBy = document.getElementById('call-handledby');
     const priority = document.getElementById('call-priority');
     const description = document.getElementById('call-description');
+    const status = document.getElementById('call-status');
+    const note = document.getElementById('call-note');
     const handled_by = outcome.value === 'Missed' ? null : handledBy.value;
     try{
-      let datePart = new Date().toISOString().slice(0,10);
-      if(editState.call){
-        const existing = findCached('calls', editState.call);
-        if(existing && existing.call_time) datePart = existing.call_time.slice(0,10);
-      }
+      const datePart = dateField.value || new Date().toISOString().slice(0,10);
       const call_time = `${datePart}T${timeField.value}:00`;
-      const payload = { caller: caller.value, phone: phone.value || null, call_time, direction: direction.value, outcome: outcome.value, priority: priority.value, handled_by, description: description.value || null };
+      const payload = { caller: caller.value, phone: phone.value || null, call_time, direction: direction.value, outcome: outcome.value, priority: priority.value, handled_by, description: description.value || null, status: status.value || null, note: note.value || null };
       let error;
       if(editState.call){
         ({ error } = await db.from('call_log').update(payload).eq('id', editState.call));
@@ -1920,7 +1941,10 @@
     document.getElementById('call-priority').value = row.priority || 'Standard';
     document.getElementById('call-handledby').value = row.handled_by || 'Mari';
     document.getElementById('call-description').value = row.description || '';
+    document.getElementById('call-status').value = row.status || 'Open';
+    document.getElementById('call-note').value = row.note || '';
     if(row.call_time){
+      document.getElementById('call-date').value = row.call_time.slice(0,10);
       document.getElementById('call-time').value = row.call_time.slice(11,16);
     }
     const h3 = document.querySelector('#modal-call .modal-head h3');
@@ -2307,6 +2331,118 @@
       }, { onConflict: 'report_date,dispatcher_id' });
       if(error) throw error;
       showToast('Report saved — your boss can now see it');
+    } catch(err){ alert(err.message); }
+  }
+
+  // ============ KPI TRACKING ============
+  const KPI_DEFS = [
+    { id: 1, label: 'Return missed phone calls (within 30 min)', target: 1, auto: 'missed_callback' },
+    { id: 2, label: 'Respond to client emails (within 1 hour)', target: 1, auto: null },
+    { id: 3, label: 'Dispatch: field teams scheduled based on available work', target: 0.85, auto: null },
+    { id: 4, label: 'All jobs firm or tentatively scheduled', target: 1, auto: null },
+    { id: 5, label: 'Update daily incoming calls / inquiries', target: 1, auto: 'daily_calls' }
+  ];
+  const KPI_WEEK_COUNT = 8;
+
+  function kpiWeeks(n){
+    // Monday-start weeks, most recent n weeks including the current (in-progress) one
+    const weeks = [];
+    const now = new Date();
+    const day = now.getDay(); // 0=Sun..6=Sat
+    const mondayOffset = day === 0 ? -6 : 1 - day;
+    const thisMonday = new Date(now); thisMonday.setDate(now.getDate() + mondayOffset); thisMonday.setHours(0,0,0,0);
+    for(let i = n - 1; i >= 0; i--){
+      const start = new Date(thisMonday); start.setDate(thisMonday.getDate() - i * 7);
+      const end = new Date(start); end.setDate(start.getDate() + 6);
+      weeks.push({ start: start.toISOString().slice(0,10), end: end.toISOString().slice(0,10) });
+    }
+    return weeks;
+  }
+
+  async function loadKPI(){
+    const weeks = kpiWeeks(KPI_WEEK_COUNT);
+    const rangeStart = weeks[0].start;
+    const rangeEndDate = new Date(weeks[weeks.length-1].end);
+    const rangeEnd = (rangeEndDate > new Date() ? new Date() : rangeEndDate).toISOString().slice(0,10);
+
+    const [{ data: calls }, { data: manual }] = await Promise.all([
+      db.from('call_log').select('phone, call_time, outcome').gte('call_time', rangeStart).lte('call_time', rangeEnd + 'T23:59:59'),
+      db.from('kpi_manual_entries').select('*').gte('week_start', rangeStart).lte('week_start', weeks[weeks.length-1].start)
+    ]);
+    const callRows = calls || [];
+    const manualRows = manual || [];
+    const today = new Date().toISOString().slice(0,10);
+
+    function computeAuto(kpiId, week){
+      const weekCalls = callRows.filter(c => c.call_time >= week.start && c.call_time <= week.end + 'T23:59:59');
+      if(kpiId === 'missed_callback'){
+        const missed = weekCalls.filter(c => c.outcome === 'Missed');
+        if(!missed.length) return null;
+        let returned = 0;
+        missed.forEach(m => {
+          const mTime = new Date(m.call_time).getTime();
+          const hit = callRows.some(c => c.phone && c.phone === m.phone && c !== m && new Date(c.call_time).getTime() > mTime && new Date(c.call_time).getTime() <= mTime + 30*60*1000);
+          if(hit) returned++;
+        });
+        return returned / missed.length;
+      }
+      if(kpiId === 'daily_calls'){
+        const lastDay = week.end < today ? week.end : today;
+        if(week.start > today) return null;
+        let dayCursor = new Date(week.start + 'T00:00:00');
+        const lastDate = new Date(lastDay + 'T00:00:00');
+        let totalDays = 0, coveredDays = 0;
+        while(dayCursor <= lastDate){
+          const dStr = dayCursor.toISOString().slice(0,10);
+          totalDays++;
+          if(callRows.some(c => c.call_time.slice(0,10) === dStr)) coveredDays++;
+          dayCursor.setDate(dayCursor.getDate() + 1);
+        }
+        return totalDays ? coveredDays / totalDays : null;
+      }
+      return null;
+    }
+
+    function manualValue(kpiId, weekStart){
+      const row = manualRows.find(r => r.kpi_id === kpiId && r.week_start === weekStart);
+      return row ? row.value : null;
+    }
+
+    function cellHtml(kpi, week){
+      const isFuture = week.start > today;
+      if(kpi.auto){
+        const v = isFuture ? null : computeAuto(kpi.auto, week);
+        if(v === null) return `<td class="mono" style="text-align:center; color:var(--text-faint);">—</td>`;
+        const pct = Math.round(v * 100);
+        const cls = v >= kpi.target ? 'paid' : (v >= kpi.target * 0.8 ? 'pending' : 'unpaid');
+        return `<td style="text-align:center;">${pillSpan(pct + '%', cls)}</td>`;
+      }
+      const v = manualValue(kpi.id, week.start);
+      const cls = v === null ? '' : (v >= kpi.target ? 'paid' : (v >= kpi.target * 0.8 ? 'pending' : 'unpaid'));
+      return `<td style="text-align:center;"><input type="number" min="0" max="100" step="1" class="kpi-input ${cls}" style="width:60px; text-align:center;" value="${v === null ? '' : Math.round(v*100)}" data-kpi="${kpi.id}" data-week="${week.start}" onchange="saveKpiManual(this)"></td>`;
+    }
+
+    const headerCells = weeks.map(w => `<th class="mono">${new Date(w.start + 'T00:00:00').toLocaleDateString('en-US',{month:'short', day:'numeric'})}</th>`).join('');
+    let html = `<tr><th>Leading &amp; lagging indicator (KPI)</th><th>Target</th>${headerCells}</tr>`;
+    KPI_DEFS.forEach(kpi => {
+      const rowCells = weeks.map(w => cellHtml(kpi, w)).join('');
+      html += `<tr><td>${kpi.label}${kpi.auto ? ' <span style="color:var(--text-faint); font-size:11px;">(auto)</span>' : ''}</td><td class="mono" style="text-align:center;">${Math.round(kpi.target*100)}%</td>${rowCells}</tr>`;
+    });
+    document.getElementById('table-kpi').innerHTML = html;
+  }
+
+  async function saveKpiManual(input){
+    const kpi_id = Number(input.dataset.kpi);
+    const week_start = input.dataset.week;
+    const raw = input.value;
+    const value = raw === '' ? null : Math.max(0, Math.min(100, Number(raw))) / 100;
+    try{
+      const { error } = await db.from('kpi_manual_entries').upsert(
+        { kpi_id, week_start, value },
+        { onConflict: 'kpi_id,week_start' }
+      );
+      if(error) throw error;
+      await loadKPI();
     } catch(err){ alert(err.message); }
   }
 </script>
