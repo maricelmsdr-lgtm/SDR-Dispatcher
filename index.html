@@ -2447,23 +2447,20 @@
     loadKPI();
   }
 
+  let kpiLoadSeq = 0;
+
   async function loadKPI(){
+    const seq = ++kpiLoadSeq;
     const weeks = kpiWeeks(KPI_WEEK_COUNT);
     const rangeStart = weeks[0].start;
     const rangeEndDate = new Date(weeks[weeks.length-1].end + 'T00:00:00');
     const rangeEnd = (rangeEndDate > new Date() ? localISODate(new Date()) : weeks[weeks.length-1].end);
 
-    const labelEl = document.getElementById('kpi-range-label');
-    if(labelEl){
-      const startLabel = new Date(weeks[0].start + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
-      const endLabel = new Date(weeks[weeks.length-1].end + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
-      labelEl.textContent = `${startLabel} — ${endLabel}` + (kpiAnchorMonday ? '' : ' (current)');
-    }
-
     const [{ data: calls }, { data: manual }] = await Promise.all([
       db.from('call_log').select('phone, call_time, outcome').gte('call_time', rangeStart).lte('call_time', rangeEnd + 'T23:59:59'),
       db.from('kpi_manual_entries').select('*').gte('week_start', rangeStart).lte('week_start', weeks[weeks.length-1].start)
     ]);
+    if(seq !== kpiLoadSeq) return; // a newer request already started — discard this stale result
     const callRows = calls || [];
     const manualRows = manual || [];
     const today = localISODate(new Date());
@@ -2524,6 +2521,13 @@
       html += `<tr><td>${kpi.label}${kpi.auto ? ' <span style="color:var(--text-faint); font-size:11px;">(auto)</span>' : ''}</td><td class="mono" style="text-align:center;">${Math.round(kpi.target*100)}%</td>${rowCells}</tr>`;
     });
     document.getElementById('table-kpi').innerHTML = html;
+
+    const labelEl = document.getElementById('kpi-range-label');
+    if(labelEl){
+      const startLabel = new Date(weeks[0].start + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+      const endLabel = new Date(weeks[weeks.length-1].end + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+      labelEl.textContent = `${startLabel} — ${endLabel}` + (kpiAnchorMonday ? '' : ' (current)');
+    }
   }
 
   async function saveKpiManual(input){
