@@ -542,7 +542,7 @@
       </div>
       <div class="table-scroll">
 <table class="data" id="table-dispatch">
-        <tr><th>Job</th><th>Tech</th><th>Customer</th><th>Type</th><th>Description</th><th>Time</th><th>Status</th><th>Actions</th></tr>
+        <tr><th>Job</th><th>Tech</th><th>Customer</th><th>Type</th><th>Description</th><th>Scheduled</th><th>Confidence</th><th>Status</th><th>Actions</th></tr>
       </table>
       </div>
     </div>
@@ -760,17 +760,22 @@
     <!-- ============ KPI TRACKING ============ -->
     <div class="view" id="view-kpi">
       <div class="module-head">
-        <div><h2>KPI tracking</h2><div class="module-sub">Weekly leading &amp; lagging indicators — auto-calculated where possible, entered manually otherwise</div></div>
+        <div><h2>KPI tracking</h2><div class="module-sub" id="kpi-sub">Weekly leading &amp; lagging indicators — auto-calculated where possible, entered manually otherwise</div></div>
         <div style="display:flex; gap:8px;">
           <button class="btn" onclick="downloadTableCSV('table-kpi','kpi_tracking.csv')">⬇ CSV</button>
         </div>
       </div>
+      <div class="callfilter-presets" style="margin-bottom:10px;">
+        <button type="button" class="chip kpi-mode-btn" data-mode="day" onclick="setKpiMode('day')">Daily</button>
+        <button type="button" class="chip kpi-mode-btn active" data-mode="week" onclick="setKpiMode('week')">Weekly</button>
+        <button type="button" class="chip kpi-mode-btn" data-mode="month" onclick="setKpiMode('month')">Monthly</button>
+      </div>
       <div class="callfilter-bar">
-        <button type="button" class="chip" onclick="kpiShift(-8)">‹ Previous 8 weeks</button>
-        <button type="button" class="chip" onclick="kpiShift(8)">Next 8 weeks ›</button>
-        <button type="button" class="chip" onclick="kpiJumpToday()">This week</button>
+        <button type="button" class="chip" id="kpi-prev-btn" onclick="kpiShiftWindow(-1)"></button>
+        <button type="button" class="chip" id="kpi-next-btn" onclick="kpiShiftWindow(1)"></button>
+        <button type="button" class="chip" id="kpi-today-btn" onclick="kpiJumpToday()"></button>
         <div class="callfilter-range">
-          <span>Jump to week of</span>
+          <span id="kpi-jump-label">Jump to week of</span>
           <input type="date" id="kpi-jump-date" onchange="kpiJumpToDate()">
         </div>
       </div>
@@ -870,6 +875,12 @@
           <select id="dispatch-jobtype"><option>Repair</option><option>Maintenance</option><option>Install</option><option>Warranty</option><option>Electrical</option><option>Plumbing</option><option>HVAC</option></select>
         </div>
         <div class="field"><label>Time</label><input type="time" id="dispatch-time" required></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Scheduled date</label><input type="date" id="dispatch-scheduled-date" required></div>
+        <div class="field"><label>Schedule confidence</label>
+          <select id="dispatch-confidence"><option>Firm</option><option>Tentative</option><option>Unscheduled</option></select>
+        </div>
       </div>
       <div class="field"><label>Status</label>
         <select id="dispatch-status"><option>Scheduled</option><option>En route</option><option>Waiting</option><option>Completed</option></select>
@@ -1134,6 +1145,10 @@
         const dateField = document.getElementById('call-date');
         if(dateField) dateField.value = new Date().toISOString().slice(0,10);
       }
+      if(name === 'dispatch'){
+        const dateField = document.getElementById('dispatch-scheduled-date');
+        if(dateField) dateField.value = new Date().toISOString().slice(0,10);
+      }
     }
     document.getElementById('modal-' + name).classList.add('active');
   }
@@ -1303,12 +1318,16 @@
       else if(name === 'serviceplans') await loadServiceplans();
       else if(name === 'invoices') await loadInvoices();
       else if(name === 'report') await loadReport();
-      else if(name === 'kpi') await loadKPI();
+      else if(name === 'kpi'){ updateKpiNavLabels(); await loadKPI(); }
     } catch(err){ console.error('loadView error', name, err); }
   }
 
   function dispatchStatusClass(v){
     return {'Scheduled':'scheduled','En route':'enroute','Waiting':'waiting','Completed':'completed'}[v] || 'scheduled';
+  }
+  function confidencePill(v){
+    const cls = {'Firm':'paid','Tentative':'pending','Unscheduled':'unpaid'}[v] || 'scheduled';
+    return pillSpan(v || '—', cls);
   }
 
   async function loadDashboardOverview(){
@@ -1380,7 +1399,7 @@
     rowCache.jobs = data || [];
     clearRows('table-dispatch');
     (data||[]).forEach(row => {
-      const html = `<tr><td class="mono">#${row.job_number}</td><td>${row.technician||'—'}</td><td>${custName(row)}</td><td>${row.job_type||'—'}</td><td>${row.description||'—'}</td><td class="mono">${fmtDate(row.scheduled_date)}</td><td>${pillSpan(row.status, dispatchStatusClass(row.status))}</td><td><button class="btn-icon" onclick="editJob('${row.id}')">Edit</button> <button class="btn-icon" onclick="deleteRow('jobs','${row.id}',loadDispatch)">Delete</button></td></tr>`;
+      const html = `<tr><td class="mono">#${row.job_number}</td><td>${row.technician||'—'}</td><td>${custName(row)}</td><td>${row.job_type||'—'}</td><td>${row.description||'—'}</td><td class="mono">${fmtDate(row.scheduled_date)}</td><td>${confidencePill(row.schedule_confidence)}</td><td>${pillSpan(row.status, dispatchStatusClass(row.status))}</td><td><button class="btn-icon" onclick="editJob('${row.id}')">Edit</button> <button class="btn-icon" onclick="deleteRow('jobs','${row.id}',loadDispatch)">Delete</button></td></tr>`;
       document.getElementById('table-dispatch').insertAdjacentHTML('beforeend', html);
     });
   }
@@ -1904,10 +1923,11 @@
     const type = document.getElementById('dispatch-jobtype');
     const status = document.getElementById('dispatch-status');
     const description = document.getElementById('dispatch-description');
-    const scheduled_date = new Date().toISOString().slice(0,10);
+    const scheduled_date = document.getElementById('dispatch-scheduled-date').value || new Date().toISOString().slice(0,10);
+    const schedule_confidence = document.getElementById('dispatch-confidence').value;
     try{
       const customer_id = await findOrCreateCustomer(customer.value);
-      const payload = { customer_id, technician: tech.value, job_type: type.value, status: status.value, scheduled_date, description: description.value || null };
+      const payload = { customer_id, technician: tech.value, job_type: type.value, status: status.value, scheduled_date, schedule_confidence, description: description.value || null };
       let error;
       if(editState.dispatch){
         ({ error } = await db.from('jobs').update(payload).eq('id', editState.dispatch));
@@ -1930,6 +1950,8 @@
     document.getElementById('dispatch-jobtype').value = row.job_type || 'Repair';
     document.getElementById('dispatch-status').value = row.status || 'Scheduled';
     document.getElementById('dispatch-description').value = row.description || '';
+    document.getElementById('dispatch-scheduled-date').value = row.scheduled_date || new Date().toISOString().slice(0,10);
+    document.getElementById('dispatch-confidence').value = row.schedule_confidence || 'Firm';
     const h3 = document.querySelector('#modal-dispatch .modal-head h3');
     if(h3) h3.textContent = 'Edit job';
     const btn = document.querySelector('#modal-dispatch button[type=submit]');
@@ -2376,26 +2398,18 @@
   // ============ KPI TRACKING ============
   const KPI_DEFS = [
     { id: 1, label: 'Return missed phone calls (within 30 min)', target: 1, auto: 'missed_callback' },
-    { id: 2, label: 'Respond to client emails (within 1 hour)', target: 1, auto: null },
-    { id: 3, label: 'Dispatch: field teams scheduled based on available work', target: 0.85, auto: null },
-    { id: 4, label: 'All jobs firm or tentatively scheduled', target: 1, auto: null },
+    { id: 2, label: 'Respond to client emails (within 1 hour)', target: 1, auto: 'email_response' },
+    { id: 3, label: 'Dispatch: field teams scheduled based on available work', target: 0.85, auto: 'dispatch_scheduled' },
+    { id: 4, label: 'All jobs firm or tentatively scheduled', target: 1, auto: 'jobs_confidence' },
     { id: 5, label: 'Update daily incoming calls / inquiries', target: 1, auto: 'daily_calls' }
   ];
-  const KPI_WEEK_COUNT = 8;
+  const KPI_MODE_COUNT = { day: 14, week: 8, month: 6 };
 
   function localISODate(d){
     const y = d.getFullYear();
     const m = String(d.getMonth()+1).padStart(2,'0');
     const day = String(d.getDate()).padStart(2,'0');
     return `${y}-${m}-${day}`;
-  }
-
-  function currentMonday(){
-    const now = new Date();
-    const day = now.getDay(); // 0=Sun..6=Sat
-    const mondayOffset = day === 0 ? -6 : 1 - day;
-    const monday = new Date(now); monday.setDate(now.getDate() + mondayOffset); monday.setHours(0,0,0,0);
-    return localISODate(monday);
   }
 
   function mondayOf(dateStr){
@@ -2406,32 +2420,93 @@
     return localISODate(d);
   }
 
-  let kpiAnchorMonday = null; // Monday of the LAST (rightmost) column; null = follow the current week automatically
-
-  function kpiWeeks(n){
-    // Monday-start weeks, n weeks ending at the anchor (or the current week if no anchor set)
-    const anchorEnd = kpiAnchorMonday || currentMonday();
-    const weeks = [];
-    const endMonday = new Date(anchorEnd + 'T00:00:00');
-    for(let i = n - 1; i >= 0; i--){
-      const start = new Date(endMonday); start.setDate(endMonday.getDate() - i * 7);
-      const end = new Date(start); end.setDate(start.getDate() + 6);
-      weeks.push({ start: localISODate(start), end: localISODate(end) });
-    }
-    return weeks;
+  function periodStartFor(mode, dateStr){
+    if(mode === 'day') return dateStr;
+    if(mode === 'week') return mondayOf(dateStr);
+    const d = new Date(dateStr + 'T00:00:00');
+    return localISODate(new Date(d.getFullYear(), d.getMonth(), 1));
   }
 
-  function kpiShift(weeksDelta){
-    const base = kpiAnchorMonday || currentMonday();
-    const d = new Date(base + 'T00:00:00');
-    d.setDate(d.getDate() + weeksDelta * 7);
-    const next = localISODate(d);
-    kpiAnchorMonday = (next === currentMonday()) ? null : next;
+  function periodEndFor(mode, startStr){
+    const d = new Date(startStr + 'T00:00:00');
+    if(mode === 'day') return startStr;
+    if(mode === 'week'){ d.setDate(d.getDate() + 6); return localISODate(d); }
+    const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+    return localISODate(end);
+  }
+
+  function shiftPeriod(mode, startStr, delta){
+    const d = new Date(startStr + 'T00:00:00');
+    if(mode === 'day') d.setDate(d.getDate() + delta);
+    else if(mode === 'week') d.setDate(d.getDate() + delta * 7);
+    else d.setMonth(d.getMonth() + delta);
+    return localISODate(d);
+  }
+
+  function currentPeriodStart(mode){
+    return periodStartFor(mode, localISODate(new Date()));
+  }
+
+  function periodLabel(mode, startStr){
+    const d = new Date(startStr + 'T00:00:00');
+    if(mode === 'month') return d.toLocaleDateString('en-US', {month:'short', year:'numeric'});
+    return d.toLocaleDateString('en-US', {month:'short', day:'numeric'});
+  }
+
+  let kpiViewMode = 'week'; // 'day' | 'week' | 'month'
+  let kpiAnchorStart = null; // start date of the LAST (rightmost) column; null = follow the current period automatically
+
+  function kpiPeriods(mode, n){
+    const anchorEnd = kpiAnchorStart || currentPeriodStart(mode);
+    const list = [];
+    let cursor = anchorEnd;
+    for(let i = 0; i < n; i++){
+      list.unshift(cursor);
+      cursor = shiftPeriod(mode, cursor, -1);
+    }
+    return list.map(start => ({ start, end: periodEndFor(mode, start) }));
+  }
+
+  const KPI_MODE_TEXT = {
+    day:   { unit: 'day',   plural: 'days',   sub: 'Daily leading & lagging indicators — auto-calculated where possible, entered manually otherwise', prevNext: KPI_MODE_COUNT.day },
+    week:  { unit: 'week',  plural: 'weeks',  sub: 'Weekly leading & lagging indicators — auto-calculated where possible, entered manually otherwise', prevNext: KPI_MODE_COUNT.week },
+    month: { unit: 'month', plural: 'months', sub: 'Monthly leading & lagging indicators — auto-calculated where possible, entered manually otherwise', prevNext: KPI_MODE_COUNT.month }
+  };
+
+  function updateKpiNavLabels(){
+    const t = KPI_MODE_TEXT[kpiViewMode];
+    document.getElementById('kpi-prev-btn').textContent = `‹ Previous ${t.prevNext} ${t.plural}`;
+    document.getElementById('kpi-next-btn').textContent = `Next ${t.prevNext} ${t.plural} ›`;
+    document.getElementById('kpi-today-btn').textContent = kpiViewMode === 'day' ? 'Today' : `This ${t.unit}`;
+    document.getElementById('kpi-jump-label').textContent = `Jump to ${t.unit} of`;
+    const subEl = document.getElementById('kpi-sub');
+    if(subEl) subEl.textContent = t.sub;
+  }
+
+  function setKpiMode(mode){
+    if(kpiViewMode === mode) return;
+    kpiViewMode = mode;
+    kpiAnchorStart = null;
+    const jumpEl = document.getElementById('kpi-jump-date');
+    if(jumpEl) jumpEl.value = '';
+    document.querySelectorAll('.kpi-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+    updateKpiNavLabels();
     loadKPI();
   }
 
+  function kpiShift(periodsDelta){
+    const base = kpiAnchorStart || currentPeriodStart(kpiViewMode);
+    const next = shiftPeriod(kpiViewMode, base, periodsDelta);
+    kpiAnchorStart = (next === currentPeriodStart(kpiViewMode)) ? null : next;
+    loadKPI();
+  }
+
+  function kpiShiftWindow(direction){
+    kpiShift(direction * KPI_MODE_COUNT[kpiViewMode]);
+  }
+
   function kpiJumpToday(){
-    kpiAnchorMonday = null;
+    kpiAnchorStart = null;
     const jumpEl = document.getElementById('kpi-jump-date');
     if(jumpEl) jumpEl.value = '';
     loadKPI();
@@ -2440,8 +2515,8 @@
   function kpiJumpToDate(){
     const val = document.getElementById('kpi-jump-date').value;
     if(!val) return;
-    const target = mondayOf(val);
-    kpiAnchorMonday = (target === currentMonday()) ? null : target;
+    const target = periodStartFor(kpiViewMode, val);
+    kpiAnchorStart = (target === currentPeriodStart(kpiViewMode)) ? null : target;
     loadKPI();
   }
 
@@ -2449,24 +2524,29 @@
 
   async function loadKPI(){
     const seq = ++kpiLoadSeq;
-    const weeks = kpiWeeks(KPI_WEEK_COUNT);
-    const rangeStart = weeks[0].start;
-    const rangeEndDate = new Date(weeks[weeks.length-1].end + 'T00:00:00');
-    const rangeEnd = (rangeEndDate > new Date() ? localISODate(new Date()) : weeks[weeks.length-1].end);
+    const mode = kpiViewMode;
+    const periods = kpiPeriods(mode, KPI_MODE_COUNT[mode]);
+    const rangeStart = periods[0].start;
+    const rangeEndDate = new Date(periods[periods.length-1].end + 'T00:00:00');
+    const rangeEnd = (rangeEndDate > new Date() ? localISODate(new Date()) : periods[periods.length-1].end);
 
-    const [{ data: calls }, { data: manual }] = await Promise.all([
+    const [{ data: calls }, { data: manual }, { data: jobs }, { data: emails }] = await Promise.all([
       db.from('call_log').select('phone, call_time, outcome').gte('call_time', rangeStart).lte('call_time', rangeEnd + 'T23:59:59'),
-      db.from('kpi_manual_entries').select('*').gte('week_start', rangeStart).lte('week_start', weeks[weeks.length-1].start)
+      db.from('kpi_manual_entries').select('*').eq('period_type', mode).gte('week_start', rangeStart).lte('week_start', periods[periods.length-1].start),
+      db.from('jobs').select('technician, scheduled_date, schedule_confidence').gte('scheduled_date', rangeStart).lte('scheduled_date', periods[periods.length-1].end),
+      db.from('email_response_log').select('received_at, responded_at').gte('received_at', rangeStart).lte('received_at', rangeEnd + 'T23:59:59')
     ]);
     if(seq !== kpiLoadSeq) return; // a newer request already started — discard this stale result
     const callRows = calls || [];
     const manualRows = manual || [];
+    const jobRows = jobs || [];
+    const emailRows = emails || [];
     const today = localISODate(new Date());
 
-    function computeAuto(kpiId, week){
-      const weekCalls = callRows.filter(c => c.call_time >= week.start && c.call_time <= week.end + 'T23:59:59');
+    function computeAuto(kpiId, period){
+      const periodCalls = callRows.filter(c => c.call_time >= period.start && c.call_time <= period.end + 'T23:59:59');
       if(kpiId === 'missed_callback'){
-        const missed = weekCalls.filter(c => c.outcome === 'Missed');
+        const missed = periodCalls.filter(c => c.outcome === 'Missed');
         if(!missed.length) return null;
         let returned = 0;
         missed.forEach(m => {
@@ -2477,9 +2557,9 @@
         return returned / missed.length;
       }
       if(kpiId === 'daily_calls'){
-        const lastDay = week.end < today ? week.end : today;
-        if(week.start > today) return null;
-        let dayCursor = new Date(week.start + 'T00:00:00');
+        const lastDay = period.end < today ? period.end : today;
+        if(period.start > today) return null;
+        let dayCursor = new Date(period.start + 'T00:00:00');
         const lastDate = new Date(lastDay + 'T00:00:00');
         let totalDays = 0, coveredDays = 0;
         while(dayCursor <= lastDate){
@@ -2490,53 +2570,70 @@
         }
         return totalDays ? coveredDays / totalDays : null;
       }
+      if(kpiId === 'dispatch_scheduled' || kpiId === 'jobs_confidence'){
+        const periodJobs = jobRows.filter(j => j.scheduled_date >= period.start && j.scheduled_date <= period.end);
+        if(!periodJobs.length) return null;
+        if(kpiId === 'dispatch_scheduled'){
+          const withTech = periodJobs.filter(j => j.technician && j.technician.trim()).length;
+          return withTech / periodJobs.length;
+        }
+        const firmOrTentative = periodJobs.filter(j => j.schedule_confidence === 'Firm' || j.schedule_confidence === 'Tentative').length;
+        return firmOrTentative / periodJobs.length;
+      }
+      if(kpiId === 'email_response'){
+        const periodEmails = emailRows.filter(e => e.received_at >= period.start && e.received_at <= period.end + 'T23:59:59');
+        if(!periodEmails.length) return null;
+        const withinHour = periodEmails.filter(e => e.responded_at && (new Date(e.responded_at).getTime() - new Date(e.received_at).getTime()) <= 60*60*1000).length;
+        return withinHour / periodEmails.length;
+      }
       return null;
     }
 
-    function manualValue(kpiId, weekStart){
-      const row = manualRows.find(r => r.kpi_id === kpiId && r.week_start === weekStart);
+    function manualValue(kpiId, periodStart){
+      const row = manualRows.find(r => r.kpi_id === kpiId && r.week_start === periodStart);
       return row ? row.value : null;
     }
 
-    function cellHtml(kpi, week){
-      const isFuture = week.start > today;
+    function cellHtml(kpi, period){
+      const isFuture = period.start > today;
       if(kpi.auto){
-        const v = isFuture ? null : computeAuto(kpi.auto, week);
+        const v = isFuture ? null : computeAuto(kpi.auto, period);
         if(v === null) return `<td class="mono" style="text-align:center; color:var(--text-faint);">—</td>`;
         const pct = Math.round(v * 100);
         const cls = v >= kpi.target ? 'paid' : (v >= kpi.target * 0.8 ? 'pending' : 'unpaid');
         return `<td style="text-align:center;">${pillSpan(pct + '%', cls)}</td>`;
       }
-      const v = manualValue(kpi.id, week.start);
+      const v = manualValue(kpi.id, period.start);
       const cls = v === null ? '' : (v >= kpi.target ? 'paid' : (v >= kpi.target * 0.8 ? 'pending' : 'unpaid'));
-      return `<td style="text-align:center;"><input type="number" min="0" max="100" step="1" class="kpi-input ${cls}" style="width:60px; text-align:center;" value="${v === null ? '' : Math.round(v*100)}" data-kpi="${kpi.id}" data-week="${week.start}" onchange="saveKpiManual(this)"></td>`;
+      return `<td style="text-align:center;"><input type="number" min="0" max="100" step="1" class="kpi-input ${cls}" style="width:60px; text-align:center;" value="${v === null ? '' : Math.round(v*100)}" data-kpi="${kpi.id}" data-period="${period.start}" onchange="saveKpiManual(this)"></td>`;
     }
 
-    const headerCells = weeks.map(w => `<th class="mono">${new Date(w.start + 'T00:00:00').toLocaleDateString('en-US',{month:'short', day:'numeric'})}</th>`).join('');
+    const headerCells = periods.map(p => `<th class="mono">${periodLabel(mode, p.start)}</th>`).join('');
     let html = `<tr><th>Leading &amp; lagging indicator (KPI)</th><th>Target</th>${headerCells}</tr>`;
     KPI_DEFS.forEach(kpi => {
-      const rowCells = weeks.map(w => cellHtml(kpi, w)).join('');
+      const rowCells = periods.map(p => cellHtml(kpi, p)).join('');
       html += `<tr><td>${kpi.label}${kpi.auto ? ' <span style="color:var(--text-faint); font-size:11px;">(auto)</span>' : ''}</td><td class="mono" style="text-align:center;">${Math.round(kpi.target*100)}%</td>${rowCells}</tr>`;
     });
     document.getElementById('table-kpi').innerHTML = html;
 
     const labelEl = document.getElementById('kpi-range-label');
     if(labelEl){
-      const startLabel = new Date(weeks[0].start + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
-      const endLabel = new Date(weeks[weeks.length-1].end + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
-      labelEl.textContent = `${startLabel} — ${endLabel}` + (kpiAnchorMonday ? '' : ' (current)');
+      const startLabel = new Date(periods[0].start + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+      const endLabel = new Date(periods[periods.length-1].end + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+      labelEl.textContent = `${startLabel} — ${endLabel}` + (kpiAnchorStart ? '' : ' (current)');
     }
   }
 
   async function saveKpiManual(input){
     const kpi_id = Number(input.dataset.kpi);
-    const week_start = input.dataset.week;
+    const week_start = input.dataset.period;
+    const period_type = kpiViewMode;
     const raw = input.value;
     const value = raw === '' ? null : Math.max(0, Math.min(100, Number(raw))) / 100;
     try{
       const { error } = await db.from('kpi_manual_entries').upsert(
-        { kpi_id, week_start, value },
-        { onConflict: 'kpi_id,week_start' }
+        { kpi_id, week_start, period_type, value },
+        { onConflict: 'kpi_id,period_type,week_start' }
       );
       if(error) throw error;
       await loadKPI();
