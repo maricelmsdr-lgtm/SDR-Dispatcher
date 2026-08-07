@@ -765,6 +765,16 @@
           <button class="btn" onclick="downloadTableCSV('table-kpi','kpi_tracking.csv')">⬇ CSV</button>
         </div>
       </div>
+      <div class="callfilter-bar">
+        <button type="button" class="chip" onclick="kpiShift(-8)">‹ Previous 8 weeks</button>
+        <button type="button" class="chip" onclick="kpiShift(8)">Next 8 weeks ›</button>
+        <button type="button" class="chip" onclick="kpiJumpToday()">This week</button>
+        <div class="callfilter-range">
+          <span>Jump to week of</span>
+          <input type="date" id="kpi-jump-date" onchange="kpiJumpToDate()">
+        </div>
+      </div>
+      <div class="callfilter-label" id="kpi-range-label"></div>
       <div class="table-scroll">
         <table class="data" id="table-kpi"></table>
       </div>
@@ -2380,19 +2390,61 @@
     return `${y}-${m}-${day}`;
   }
 
-  function kpiWeeks(n){
-    // Monday-start weeks, most recent n weeks including the current (in-progress) one
-    const weeks = [];
+  function currentMonday(){
     const now = new Date();
     const day = now.getDay(); // 0=Sun..6=Sat
     const mondayOffset = day === 0 ? -6 : 1 - day;
-    const thisMonday = new Date(now); thisMonday.setDate(now.getDate() + mondayOffset); thisMonday.setHours(0,0,0,0);
+    const monday = new Date(now); monday.setDate(now.getDate() + mondayOffset); monday.setHours(0,0,0,0);
+    return localISODate(monday);
+  }
+
+  function mondayOf(dateStr){
+    const d = new Date(dateStr + 'T00:00:00');
+    const day = d.getDay();
+    const offset = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + offset);
+    return localISODate(d);
+  }
+
+  let kpiAnchorMonday = null; // Monday of the LAST (rightmost) column; null = follow the current week automatically
+
+  function kpiWeeks(n){
+    // Monday-start weeks, n weeks ending at the anchor (or the current week if no anchor set)
+    const anchorEnd = kpiAnchorMonday || currentMonday();
+    const weeks = [];
+    const endMonday = new Date(anchorEnd + 'T00:00:00');
     for(let i = n - 1; i >= 0; i--){
-      const start = new Date(thisMonday); start.setDate(thisMonday.getDate() - i * 7);
+      const start = new Date(endMonday); start.setDate(endMonday.getDate() - i * 7);
       const end = new Date(start); end.setDate(start.getDate() + 6);
       weeks.push({ start: localISODate(start), end: localISODate(end) });
     }
     return weeks;
+  }
+
+  function kpiShift(weeksDelta){
+    const base = kpiAnchorMonday || currentMonday();
+    const d = new Date(base + 'T00:00:00');
+    d.setDate(d.getDate() + weeksDelta * 7);
+    const today = currentMonday();
+    const next = localISODate(d) > today ? today : localISODate(d);
+    kpiAnchorMonday = (next === today) ? null : next;
+    loadKPI();
+  }
+
+  function kpiJumpToday(){
+    kpiAnchorMonday = null;
+    const jumpEl = document.getElementById('kpi-jump-date');
+    if(jumpEl) jumpEl.value = '';
+    loadKPI();
+  }
+
+  function kpiJumpToDate(){
+    const val = document.getElementById('kpi-jump-date').value;
+    if(!val) return;
+    const today = currentMonday();
+    const target = mondayOf(val);
+    kpiAnchorMonday = (target >= today) ? null : target;
+    loadKPI();
   }
 
   async function loadKPI(){
@@ -2400,6 +2452,13 @@
     const rangeStart = weeks[0].start;
     const rangeEndDate = new Date(weeks[weeks.length-1].end + 'T00:00:00');
     const rangeEnd = (rangeEndDate > new Date() ? localISODate(new Date()) : weeks[weeks.length-1].end);
+
+    const labelEl = document.getElementById('kpi-range-label');
+    if(labelEl){
+      const startLabel = new Date(weeks[0].start + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+      const endLabel = new Date(weeks[weeks.length-1].end + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+      labelEl.textContent = `${startLabel} — ${endLabel}` + (kpiAnchorMonday ? '' : ' (current)');
+    }
 
     const [{ data: calls }, { data: manual }] = await Promise.all([
       db.from('call_log').select('phone, call_time, outcome').gte('call_time', rangeStart).lte('call_time', rangeEnd + 'T23:59:59'),
