@@ -2425,9 +2425,8 @@
     const base = kpiAnchorMonday || currentMonday();
     const d = new Date(base + 'T00:00:00');
     d.setDate(d.getDate() + weeksDelta * 7);
-    const today = currentMonday();
-    const next = localISODate(d) > today ? today : localISODate(d);
-    kpiAnchorMonday = (next === today) ? null : next;
+    const next = localISODate(d);
+    kpiAnchorMonday = (next === currentMonday()) ? null : next;
     loadKPI();
   }
 
@@ -2441,9 +2440,8 @@
   function kpiJumpToDate(){
     const val = document.getElementById('kpi-jump-date').value;
     if(!val) return;
-    const today = currentMonday();
     const target = mondayOf(val);
-    kpiAnchorMonday = (target >= today) ? null : target;
+    kpiAnchorMonday = (target === currentMonday()) ? null : target;
     loadKPI();
   }
 
