@@ -352,6 +352,11 @@
     color:var(--text); font-family:'Inter',sans-serif; font-size:12.5px; padding:8px 12px;
   }
   .callfilter-search:focus, .callfilter-range input:focus{outline:none; border-color:var(--cyan-dim);}
+  #call-type-filter{
+    background:var(--panel-2); border:1px solid var(--line); border-radius:7px;
+    color:var(--text); font-family:'Inter',sans-serif; font-size:12.5px; padding:8px 10px;
+  }
+  #call-type-filter:focus{outline:none; border-color:var(--cyan-dim);}
   .callfilter-label{
     color:var(--text-faint); font-family:'JetBrains Mono',monospace; font-size:10.5px;
     letter-spacing:0.8px; margin:0 0 14px 2px; text-transform:uppercase;
@@ -585,6 +590,12 @@
           <input type="date" id="call-to" onchange="onCustomRangeChange()">
         </div>
         <input type="text" id="call-search" class="callfilter-search" placeholder="Search caller, phone, notes…" oninput="onCallSearchInput()">
+        <select id="call-type-filter" onchange="onCallTypeChange()">
+          <option value="all">All types</option>
+          <option value="Inbound">Inbound</option>
+          <option value="Outbound">Outbound</option>
+          <option value="Missed">Missed</option>
+        </select>
       </div>
       <div class="callfilter-label" id="call-range-label">Today</div>
 
@@ -1412,7 +1423,7 @@
   }
 
   // ---------- CALL LOG CENTER ----------
-  const callFilter = { preset: 'today', from: null, to: null, search: '' };
+  const callFilter = { preset: 'today', from: null, to: null, search: '', type: 'all' };
   let callsRangeCache = [];
 
   function presetRange(preset){
@@ -1462,13 +1473,28 @@
 
   function onCallSearchInput(){
     callFilter.search = document.getElementById('call-search').value.trim().toLowerCase();
-    renderCallsTable(filterCallsBySearch(callsRangeCache));
+    renderCallsTable(filterCalls(callsRangeCache));
+  }
+
+  function onCallTypeChange(){
+    callFilter.type = document.getElementById('call-type-filter').value;
+    renderCallsTable(filterCalls(callsRangeCache));
   }
 
   function filterCallsBySearch(rows){
     if(!callFilter.search) return rows;
     const q = callFilter.search;
     return rows.filter(r => [r.caller, r.phone, r.description, r.handled_by, r.status, r.note].some(v => (v||'').toLowerCase().includes(q)));
+  }
+
+  function filterCallsByType(rows){
+    if(callFilter.type === 'all') return rows;
+    if(callFilter.type === 'Missed') return rows.filter(r => r.outcome === 'Missed');
+    return rows.filter(r => r.direction === callFilter.type);
+  }
+
+  function filterCalls(rows){
+    return filterCallsByType(filterCallsBySearch(rows));
   }
 
   async function refreshCallLog(){
@@ -1492,7 +1518,7 @@
     rowCache.calls = callsRangeCache;
     const label = document.getElementById('call-range-label');
     if(label) label.textContent = fmtRangeLabel();
-    renderCallsTable(filterCallsBySearch(callsRangeCache));
+    renderCallsTable(filterCalls(callsRangeCache));
     renderCallSummary(callsRangeCache, jobsRes.data || [], callbacksRes.data || []);
   }
 
@@ -1532,10 +1558,13 @@
   }
 
   function exportCallsCSV(){
-    downloadTableCSV('table-calls', `call_log_${callFilter.from}_to_${callFilter.to}.csv`);
+    const typeSuffix = callFilter.type === 'all' ? '' : `_${callFilter.type.toLowerCase()}`;
+    downloadTableCSV('table-calls', `call_log_${callFilter.from}_to_${callFilter.to}${typeSuffix}.csv`);
   }
   function exportCallsPDF(){
-    downloadTablePDF('table-calls', `call_log_${callFilter.from}_to_${callFilter.to}.pdf`, 'Call Log — ' + fmtRangeLabel());
+    const typeSuffix = callFilter.type === 'all' ? '' : `_${callFilter.type.toLowerCase()}`;
+    const typeLabel = callFilter.type === 'all' ? '' : ` (${callFilter.type})`;
+    downloadTablePDF('table-calls', `call_log_${callFilter.from}_to_${callFilter.to}${typeSuffix}.pdf`, 'Call Log — ' + fmtRangeLabel() + typeLabel);
   }
 
   async function loadLeads(){
@@ -2344,6 +2373,13 @@
   ];
   const KPI_WEEK_COUNT = 8;
 
+  function localISODate(d){
+    const y = d.getFullYear();
+    const m = String(d.getMonth()+1).padStart(2,'0');
+    const day = String(d.getDate()).padStart(2,'0');
+    return `${y}-${m}-${day}`;
+  }
+
   function kpiWeeks(n){
     // Monday-start weeks, most recent n weeks including the current (in-progress) one
     const weeks = [];
@@ -2354,7 +2390,7 @@
     for(let i = n - 1; i >= 0; i--){
       const start = new Date(thisMonday); start.setDate(thisMonday.getDate() - i * 7);
       const end = new Date(start); end.setDate(start.getDate() + 6);
-      weeks.push({ start: start.toISOString().slice(0,10), end: end.toISOString().slice(0,10) });
+      weeks.push({ start: localISODate(start), end: localISODate(end) });
     }
     return weeks;
   }
@@ -2362,8 +2398,8 @@
   async function loadKPI(){
     const weeks = kpiWeeks(KPI_WEEK_COUNT);
     const rangeStart = weeks[0].start;
-    const rangeEndDate = new Date(weeks[weeks.length-1].end);
-    const rangeEnd = (rangeEndDate > new Date() ? new Date() : rangeEndDate).toISOString().slice(0,10);
+    const rangeEndDate = new Date(weeks[weeks.length-1].end + 'T00:00:00');
+    const rangeEnd = (rangeEndDate > new Date() ? localISODate(new Date()) : weeks[weeks.length-1].end);
 
     const [{ data: calls }, { data: manual }] = await Promise.all([
       db.from('call_log').select('phone, call_time, outcome').gte('call_time', rangeStart).lte('call_time', rangeEnd + 'T23:59:59'),
@@ -2371,7 +2407,7 @@
     ]);
     const callRows = calls || [];
     const manualRows = manual || [];
-    const today = new Date().toISOString().slice(0,10);
+    const today = localISODate(new Date());
 
     function computeAuto(kpiId, week){
       const weekCalls = callRows.filter(c => c.call_time >= week.start && c.call_time <= week.end + 'T23:59:59');
@@ -2393,7 +2429,7 @@
         const lastDate = new Date(lastDay + 'T00:00:00');
         let totalDays = 0, coveredDays = 0;
         while(dayCursor <= lastDate){
-          const dStr = dayCursor.toISOString().slice(0,10);
+          const dStr = localISODate(dayCursor);
           totalDays++;
           if(callRows.some(c => c.call_time.slice(0,10) === dStr)) coveredDays++;
           dayCursor.setDate(dayCursor.getDate() + 1);
