@@ -1176,7 +1176,11 @@
     <div class="modal-head"><h3 data-add-label="Log call">Log call</h3><button class="modal-close" onclick="closeModal('call')">&times;</button></div>
     <form onsubmit="return submitCall(event)">
       <div class="field"><label>Caller</label><input type="text" id="call-caller" placeholder="Name or 'Unknown'" required></div>
-      <div class="field"><label>Phone number</label><input type="tel" id="call-phone" placeholder="(555) 123-4567"></div>
+      <div class="field">
+        <label id="call-phone-label">Phone number</label>
+        <input type="tel" id="call-phone" placeholder="(555) 123-4567" pattern="^[\d\s\(\)\-\+\.]{7,20}$" title="Enter digits only (spaces, dashes, and parentheses are fine) — no names or notes.">
+        <div class="report-notes-hint" id="call-phone-hint" style="display:none;">Required for missed calls — the "Returned Missed Calls" KPI matches callbacks by this number.</div>
+      </div>
       <div class="field-row">
         <div class="field"><label>Date</label><input type="date" id="call-date" required></div>
         <div class="field"><label>Time</label><input type="time" id="call-time" required></div>
@@ -1186,7 +1190,7 @@
           <select id="call-direction"><option>Inbound</option><option>Outbound</option></select>
         </div>
         <div class="field"><label>Outcome</label>
-          <select id="call-outcome"><option>Answered</option><option>Missed</option></select>
+          <select id="call-outcome" onchange="updateCallPhoneRequirement()"><option>Answered</option><option>Missed</option></select>
         </div>
       </div>
       <div class="field"><label>Priority</label>
@@ -1430,6 +1434,7 @@
         if(timeField) timeField.value = new Date().toTimeString().slice(0,5);
         const dateField = document.getElementById('call-date');
         if(dateField) dateField.value = new Date().toISOString().slice(0,10);
+        updateCallPhoneRequirement();
       }
       if(name === 'dispatch'){
         const dateField = document.getElementById('dispatch-scheduled-date');
@@ -3130,6 +3135,28 @@ SDR Electric Plumbing & Heating`;
     openModal('dispatch');
   }
 
+  // ---------- Call phone validation (keeps the "Returned Missed Calls" KPI reliable) ----------
+  function updateCallPhoneRequirement(){
+    const outcome = document.getElementById('call-outcome');
+    const phone = document.getElementById('call-phone');
+    const label = document.getElementById('call-phone-label');
+    const hint = document.getElementById('call-phone-hint');
+    const isMissed = outcome && outcome.value === 'Missed';
+    if(phone) phone.required = !!isMissed;
+    if(label) label.textContent = isMissed ? 'Phone number (required)' : 'Phone number';
+    if(hint) hint.style.display = isMissed ? '' : 'none';
+  }
+
+  // Rejects free-text notes typed into the phone field (must be mostly digits,
+  // 7–15 digits once formatting characters are stripped — matches real phone lengths).
+  function isValidPhone(raw){
+    const trimmed = (raw || '').trim();
+    if(!trimmed) return true; // empty is allowed unless outcome=Missed (checked separately)
+    if(!/^[\d\s\(\)\-\+\.]+$/.test(trimmed)) return false; // letters/sentences not allowed
+    const digits = trimmed.replace(/\D/g, '');
+    return digits.length >= 7 && digits.length <= 15;
+  }
+
   async function submitCall(e){
     e.preventDefault();
     const f = e.target;
@@ -3145,10 +3172,21 @@ SDR Electric Plumbing & Heating`;
     const status = document.getElementById('call-status');
     const note = document.getElementById('call-note');
     const handled_by = outcome.value === 'Missed' ? null : handledBy.value;
+    const phoneVal = phone.value.trim();
+    if(outcome.value === 'Missed' && !phoneVal){
+      alert('Phone number is required for missed calls — without it, the "Returned Missed Calls" KPI can\'t match a callback to this call.');
+      phone.focus();
+      return false;
+    }
+    if(!isValidPhone(phoneVal)){
+      alert('That doesn\'t look like a valid phone number (only digits, spaces, dashes, parentheses, and + are allowed — no names or notes).');
+      phone.focus();
+      return false;
+    }
     try{
       const datePart = dateField.value || new Date().toISOString().slice(0,10);
       const call_time = `${datePart}T${timeField.value}:00`;
-      const payload = { caller: caller.value, phone: phone.value || null, call_time, direction: direction.value, outcome: outcome.value, priority: priority.value, handled_by, description: description.value || null, status: status.value || null, note: note.value || null };
+      const payload = { caller: caller.value, phone: phoneVal || null, call_time, direction: direction.value, outcome: outcome.value, priority: priority.value, handled_by, description: description.value || null, status: status.value || null, note: note.value || null };
       let error;
       if(editState.call){
         ({ error } = await db.from('call_log').update(payload).eq('id', editState.call));
@@ -3179,6 +3217,7 @@ SDR Electric Plumbing & Heating`;
       document.getElementById('call-date').value = row.call_time.slice(0,10);
       document.getElementById('call-time').value = row.call_time.slice(11,16);
     }
+    updateCallPhoneRequirement();
     const h3 = document.querySelector('#modal-call .modal-head h3');
     if(h3) h3.textContent = 'Edit call';
     const btn = document.querySelector('#modal-call button[type=submit]');
