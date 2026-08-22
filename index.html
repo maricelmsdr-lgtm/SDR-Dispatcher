@@ -16,7 +16,7 @@
     --text:#E7F1F1;
     --text-dim:#8FA6AC;
     --text-faint:#5F757C;
-    --cyan:#1487D6;
+    --cyan:#0498D7;
     --cyan-dim:#0A57A6;
     --amber:#F7A40F;
     --amber-dim:#8A5C0A;
@@ -59,7 +59,12 @@
     color:var(--text);
     line-height:1.1;
   }
-  .brand-mark span{color:var(--cyan);}
+  .brand-mark span{
+    background:linear-gradient(90deg, var(--cyan-dim), var(--cyan));
+    -webkit-background-clip:text;
+    background-clip:text;
+    color:transparent;
+  }
   .brand-sub{
     font-family:'JetBrains Mono',monospace;
     font-size:10px;
@@ -146,9 +151,8 @@
   .btn-icon:hover{border-color:var(--cyan-dim); color:var(--text);}
   .cert-current{margin-top:4px; font-size:12px;}
   .btn-primary{
-    background:linear-gradient(0deg, var(--cyan), var(--cyan));
-    background:var(--cyan);
-    color:#08211E;
+    background:linear-gradient(90deg, var(--cyan-dim), var(--cyan));
+    color:#ffffff;
     border:none;
     font-weight:600;
   }
