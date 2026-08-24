@@ -640,7 +640,9 @@
     <div class="view" id="view-dispatch">
       <div class="module-head">
         <div><h2>Dispatch board</h2><div class="module-sub">All jobs assigned today, by technician</div></div>
-        <div style="display:flex; gap:8px;">
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <span id="dispatch-sync-status" class="module-sub" style="margin-right:4px;">ServiceM8: checking…</span>
+          <button class="btn" onclick="syncServiceM8Dispatch()">↻ Sync ServiceM8</button>
           <button class="btn" onclick="downloadTableCSV('table-dispatch','jobs_backup.csv')">⬇ CSV</button>
           <button class="btn" onclick="downloadTablePDF('table-dispatch','jobs_backup.pdf','Jobs')">⬇ PDF</button>
           <button class="btn btn-primary" onclick="openModal('dispatch', true)">+ Assign job</button>
@@ -962,6 +964,7 @@
         <div><h2>KPI tracking</h2><div class="module-sub" id="kpi-sub">Weekly leading &amp; lagging indicators — auto-calculated where possible, entered manually otherwise</div></div>
         <div style="display:flex; gap:8px;">
           <button class="btn" onclick="downloadTableCSV('table-kpi','kpi_tracking.csv')">⬇ CSV</button>
+          <button class="btn" onclick="downloadKpiPDF()">⬇ PDF</button>
         </div>
       </div>
       <div class="callfilter-presets" style="margin-bottom:10px;">
@@ -2024,7 +2027,7 @@ SDR Electric Plumbing & Heating`;
     if(currentRole !== 'dispatcher' && !bossAllowedViews.includes(name)) return;
     try{
       if(name === 'dashboard') await loadDashboardOverview();
-      else if(name === 'dispatch') await loadDispatch();
+      else if(name === 'dispatch'){ await loadDispatch(); await loadServiceM8DispatchSyncStatus(); }
       else if(name === 'debriefs') await loadDebriefs();
       else if(name === 'calls') await refreshCallLog();
       else if(name === 'leads') await loadLeads();
@@ -2232,7 +2235,7 @@ SDR Electric Plumbing & Heating`;
   }
 
   async function loadDispatch(){
-    const { data } = await db.from('jobs').select('*, customers(first_name,last_name,email)').order('created_at', {ascending:false});
+    const { data } = await db.from('jobs').select('*, customers(first_name,last_name,email)').order('scheduled_date', {ascending:false}).order('scheduled_time', {ascending:true});
     rowCache.jobs = data || [];
     clearRows('table-dispatch');
     (data||[]).forEach(row => {
@@ -2243,6 +2246,38 @@ SDR Electric Plumbing & Heating`;
       const html = `<tr><td class="mono">#${row.job_number}</td><td>${row.technician||'—'}</td><td>${custName(row)}</td><td>${row.job_type||'—'}</td><td>${row.description||'—'}</td><td>${row.notes||'—'}</td><td class="mono">${fmtDate(row.scheduled_date)}${row.scheduled_time ? ' '+fmtTimeStr(row.scheduled_time) : ''}</td><td class="mono">${row.invoice_amount != null ? '$'+Number(row.invoice_amount).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</td><td>${invoiceStatusPill(row.invoice_status)}</td><td>${pillSpan(row.status, dispatchStatusClass(row.status))}</td><td>${photosHtml}</td><td><button class="btn-icon" onclick="editJob('${row.id}')">Edit</button> <button class="btn-icon" onclick="deleteRow('jobs','${row.id}',loadDispatch)">Delete</button></td></tr>`;
       document.getElementById('table-dispatch').insertAdjacentHTML('beforeend', html);
     });
+  }
+
+  async function loadServiceM8DispatchSyncStatus(){
+    const el = document.getElementById('dispatch-sync-status');
+    if(!el) return;
+    try{
+      const { data, error } = await db.from('integration_sync_state').select('last_synced_at,last_run_at,last_status,last_error').eq('source','servicem8').maybeSingle();
+      if(error) throw error;
+      if(!data){ el.textContent = 'ServiceM8: not configured'; return; }
+      const when = data.last_run_at ? new Date(data.last_run_at).toLocaleString() : 'never';
+      el.textContent = data.last_status === 'ok' ? `ServiceM8: synced ${when}` : `ServiceM8: sync error`;
+      el.title = data.last_error || '';
+    } catch(err){
+      el.textContent = 'ServiceM8: status unavailable';
+      el.title = err.message || '';
+    }
+  }
+
+  async function syncServiceM8Dispatch(){
+    const el = document.getElementById('dispatch-sync-status');
+    if(el) el.textContent = 'ServiceM8: syncing…';
+    try{
+      const { data, error } = await db.functions.invoke('servicem8-sync', { body: {} });
+      if(error) throw error;
+      if(data && data.ok === false) throw new Error(data.error || 'ServiceM8 sync failed');
+      showToast(`ServiceM8 sync complete — ${Number(data?.jobs_upserted || 0)} jobs updated`);
+      await loadDispatch();
+      await loadServiceM8DispatchSyncStatus();
+    } catch(err){
+      alert('ServiceM8 dispatch sync failed: ' + (err.message || err));
+      await loadServiceM8DispatchSyncStatus();
+    }
   }
 
   const debriefFilter = { preset: 'last7', from: null, to: null, search: '' };
@@ -4306,6 +4341,55 @@ SDR Electric Plumbing & Heating`;
       const endLabel = new Date(periods[periods.length-1].end + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
       labelEl.textContent = `${startLabel} — ${endLabel}` + (kpiAnchorStart ? '' : ' (current)');
     }
+  }
+
+  function downloadKpiPDF(){
+    const table = document.getElementById('table-kpi');
+    if(!table || !table.querySelector('tr')){
+      alert('There is no KPI report to export yet.');
+      return;
+    }
+    if(!window.jspdf || !window.jspdf.jsPDF){
+      alert('PDF export is not available yet. Please refresh the page and try again.');
+      return;
+    }
+
+    const rows = Array.from(table.querySelectorAll('tr')).map(row =>
+      Array.from(row.querySelectorAll('th,td')).map(cell => {
+        const input = cell.querySelector('input');
+        return (input ? input.value + '%' : cell.textContent).replace(/\s+/g, ' ').trim();
+      })
+    );
+    if(!rows.length) return;
+
+    const from = document.getElementById('kpi-from-date')?.value || '';
+    const to = document.getElementById('kpi-to-date')?.value || '';
+    const rangeLabel = from && to ? `${from} to ${to}` : (document.getElementById('kpi-range-label')?.textContent || 'Selected range');
+
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    doc.setFontSize(16);
+    doc.text('SDR Dispatcher — KPI Tracking Report', 14, 14);
+    doc.setFontSize(10);
+    doc.text(`Date range: ${rangeLabel}`, 14, 21);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 27);
+
+    const head = [rows[0]];
+    const body = rows.slice(1);
+    doc.autoTable({
+      head,
+      body,
+      startY: 33,
+      theme: 'grid',
+      styles: { fontSize: 7, cellPadding: 2, valign: 'middle' },
+      headStyles: { fontSize: 7, fontStyle: 'bold' },
+      columnStyles: { 0: { cellWidth: 75 }, 1: { cellWidth: 16 } },
+      margin: { left: 10, right: 10 }
+    });
+
+    const safeFrom = from || 'range';
+    const safeTo = to || 'report';
+    doc.save(`SDR_KPI_Report_${safeFrom}_to_${safeTo}.pdf`);
   }
 
   async function saveKpiManual(input){
