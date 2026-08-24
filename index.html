@@ -973,9 +973,13 @@
         <button type="button" class="chip" id="kpi-prev-btn" onclick="kpiShiftWindow(-1)"></button>
         <button type="button" class="chip" id="kpi-next-btn" onclick="kpiShiftWindow(1)"></button>
         <button type="button" class="chip" id="kpi-today-btn" onclick="kpiJumpToday()"></button>
-        <div class="callfilter-range">
-          <span id="kpi-jump-label">Jump to week of</span>
-          <input type="date" id="kpi-jump-date" onchange="kpiJumpToDate()">
+        <div class="callfilter-range" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+          <label style="display:flex;align-items:center;gap:6px;">From Date
+            <input type="date" id="kpi-from-date" onchange="kpiDateRangeChanged()">
+          </label>
+          <label style="display:flex;align-items:center;gap:6px;">To Date
+            <input type="date" id="kpi-to-date" onchange="kpiDateRangeChanged()">
+          </label>
         </div>
       </div>
       <div class="callfilter-label" id="kpi-range-label"></div>
@@ -4137,7 +4141,6 @@ SDR Electric Plumbing & Heating`;
     document.getElementById('kpi-prev-btn').textContent = `‹ Previous ${t.prevNext} ${t.plural}`;
     document.getElementById('kpi-next-btn').textContent = `Next ${t.prevNext} ${t.plural} ›`;
     document.getElementById('kpi-today-btn').textContent = kpiViewMode === 'day' ? 'Today' : `This ${t.unit}`;
-    document.getElementById('kpi-jump-label').textContent = `Jump to ${t.unit} of`;
     const subEl = document.getElementById('kpi-sub');
     if(subEl) subEl.textContent = t.sub;
   }
@@ -4146,8 +4149,7 @@ SDR Electric Plumbing & Heating`;
     if(kpiViewMode === mode) return;
     kpiViewMode = mode;
     kpiAnchorStart = null;
-    const jumpEl = document.getElementById('kpi-jump-date');
-    if(jumpEl) jumpEl.value = '';
+    setKpiDateInputs();
     document.querySelectorAll('.kpi-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
     updateKpiNavLabels();
     loadKPI();
@@ -4157,6 +4159,7 @@ SDR Electric Plumbing & Heating`;
     const base = kpiAnchorStart || currentPeriodStart(kpiViewMode);
     const next = shiftPeriod(kpiViewMode, base, periodsDelta);
     kpiAnchorStart = (next === currentPeriodStart(kpiViewMode)) ? null : next;
+    setKpiDateInputs();
     loadKPI();
   }
 
@@ -4166,16 +4169,35 @@ SDR Electric Plumbing & Heating`;
 
   function kpiJumpToday(){
     kpiAnchorStart = null;
-    const jumpEl = document.getElementById('kpi-jump-date');
-    if(jumpEl) jumpEl.value = '';
+    setKpiDateInputs();
     loadKPI();
   }
 
   function kpiJumpToDate(){
-    const val = document.getElementById('kpi-jump-date').value;
+    const val = document.getElementById('kpi-from-date')?.value;
     if(!val) return;
     const target = periodStartFor(kpiViewMode, val);
     kpiAnchorStart = (target === currentPeriodStart(kpiViewMode)) ? null : target;
+    setKpiDateInputs();
+    loadKPI();
+  }
+
+  function setKpiDateInputs(){
+    const from = document.getElementById('kpi-from-date');
+    const to = document.getElementById('kpi-to-date');
+    if(!from || !to) return;
+    if(!from.value || !to.value){
+      const periods = kpiPeriods(kpiViewMode, KPI_MODE_COUNT[kpiViewMode]);
+      from.value = periods[0].start;
+      to.value = periods[periods.length - 1].end;
+    }
+  }
+
+  function kpiDateRangeChanged(){
+    const from = document.getElementById('kpi-from-date')?.value;
+    const to = document.getElementById('kpi-to-date')?.value;
+    if(!from || !to) return;
+    if(from > to){ alert('From Date cannot be after To Date.'); return; }
     loadKPI();
   }
 
@@ -4184,10 +4206,13 @@ SDR Electric Plumbing & Heating`;
   async function loadKPI(){
     const seq = ++kpiLoadSeq;
     const mode = kpiViewMode;
+    setKpiDateInputs();
+    const selectedFrom = document.getElementById('kpi-from-date')?.value;
+    const selectedTo = document.getElementById('kpi-to-date')?.value;
     const periods = kpiPeriods(mode, KPI_MODE_COUNT[mode]);
-    const rangeStart = periods[0].start;
-    const rangeEndDate = new Date(periods[periods.length-1].end + 'T00:00:00');
-    const rangeEnd = (rangeEndDate > new Date() ? localISODate(new Date()) : periods[periods.length-1].end);
+    const rangeStart = selectedFrom || periods[0].start;
+    const selectedEndDate = selectedTo ? new Date(selectedTo + 'T00:00:00') : new Date(periods[periods.length-1].end + 'T00:00:00');
+    const rangeEnd = (selectedEndDate > new Date() ? localISODate(new Date()) : (selectedTo || periods[periods.length-1].end));
 
     const [{ data: calls }, { data: manual }, { data: jobs }, { data: emails }] = await Promise.all([
       db.from('call_log').select('phone, call_time, outcome').gte('call_time', rangeStart).lte('call_time', rangeEnd + 'T23:59:59'),
