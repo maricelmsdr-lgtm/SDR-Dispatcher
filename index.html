@@ -618,7 +618,7 @@
 <div class="auth-screen" id="auth-screen">
   <div class="auth-box">
     <div class="brand-mark" style="margin-bottom:4px;"><span class="sdr-logo">SDR</span></div>
-    <div class="brand-sub" style="margin-bottom:12px;">HVAC DISPATCH &mdash; Dispatcher Command Center</div><div style="text-align:center;color:var(--cyan);font-size:12px;margin-bottom:18px;">Demo mode opens automatically — no login required</div>
+    <div class="brand-sub" style="margin-bottom:12px;">HVAC DISPATCH &mdash; Dispatcher Command Center</div><div style="text-align:center;color:var(--cyan);font-size:12px;margin-bottom:18px;">Sign in to continue</div>
     <div id="auth-error" class="auth-error"></div>
     <button type="button" class="btn" id="ms-signin-btn" onclick="signInWithMicrosoft()" style="width:100%; display:flex; align-items:center; justify-content:center; gap:9px; margin-bottom:18px;">
       <svg width="16" height="16" viewBox="0 0 21 21" xmlns="http://www.w3.org/2000/svg"><rect x="1" y="1" width="9" height="9" fill="#F25022"/><rect x="11" y="1" width="9" height="9" fill="#7FBA00"/><rect x="1" y="11" width="9" height="9" fill="#00A4EF"/><rect x="11" y="11" width="9" height="9" fill="#FFB900"/></svg>
@@ -666,7 +666,7 @@
     </ul>
     <div class="sidebar-foot" id="sidebar-foot">
       <span id="whoami"></span><br>
-      <a href="#" onclick="return doLogout()" style="color:var(--text-faint);">Log out</a><br><a href="#" onclick="return resetDemoData()" style="color:var(--text-faint);">Reset demo data</a>
+      <a href="#" onclick="return doLogout()" style="color:var(--text-faint);">Log out</a>
     </div>
   </div>
 
@@ -681,7 +681,7 @@
           <div class="date" id="dash-date">—</div>
         </div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:flex-end;">
-          <span class="mode-badge" id="app-mode-badge">Demo mode</span>
+          <span class="mode-badge" id="app-mode-badge">Live database</span>
           <button class="btn" onclick="refreshCurrentView()">↻ Refresh</button>
           <button class="btn" onclick="openEmailComposer()">✉ Send Email</button>
           <button class="btn btn-primary" onclick="goTo('report')">Generate daily report</button>
@@ -700,7 +700,7 @@
 
       <div class="report-allclear" style="margin-bottom:18px;">
         <span style="font-size:16px;">●</span>
-        <span><strong>Command center ready.</strong> Jobs, calls, leads, warranties and invoices are available from the left menu. Your changes are saved in this browser in Demo mode.</span>
+        <span><strong>Command center ready.</strong> Jobs, calls, leads, warranties and invoices are available from the left menu. Your changes are saved to the live SDR database.</span>
       </div>
 
       <div class="dash-panel-grid">
@@ -1535,13 +1535,13 @@
 <script>
   const SUPABASE_URL = 'https://pdeenwpzyysfncscflfu.supabase.co';
   const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJwZGVlbnc3cHl5c2ZuY3NjZmxmdSIsInJvbGUiOiJhbm9uIiwiaWF0IjoxNzg1ODEzOTk1LCJleHAiOjIxMDEzODk5OTl9.4VJR9dKuu_XmmDZgEvy_CaLdt7llKjw89k0nQlzmf8g';
-  const LIVE_DATABASE = false; // Set true only after Supabase migrations/auth are configured.
+  const LIVE_DATABASE = true; // SDR uses the connected Supabase production database.
   const remoteDb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
-  // ---------- LOCAL DEMO DATA LAYER ----------
+  // ---------- LOCAL FALLBACK LAYER (unused while LIVE_DATABASE=true) ----------
   // The dashboard works without a server: data is stored in localStorage and all
   // existing screens/forms use the same db.from(...) interface as Supabase.
-  const LOCAL_KEY = 'sdr_dispatch_demo_v2';
+  const LOCAL_KEY = 'sdr_dispatch_local_fallback_v2';
   const todayISO = new Date().toISOString().slice(0,10);
   const daysAgo = n => { const d=new Date(); d.setDate(d.getDate()-n); return d.toISOString().slice(0,10); };
   const isoAt = (date, time='09:00') => `${date}T${time}:00`;
@@ -1585,15 +1585,15 @@
       {id:'cb_2',customer_id:'cust_2',due_date:daysAgo(1),status:'Completed',reason:'Maintenance plan follow-up',notes:'Sent options',created_at:isoAt(daysAgo(1),'09:00')}
     ],
     installations:[
-      {id:'inst_1',customer_id:'cust_1',brand:'Carrier',equipment:'Heat Pump',model:'24ABC6',serial:'HP-10001',install_date:daysAgo(180),registration_date:daysAgo(179),certificate_url:'',status:'Active',equipment_warranty:'Active',jb_warranty:'Active',technician:'Alex',notes:'Demo installation',created_at:isoAt(daysAgo(180),'10:00')},
-      {id:'inst_2',customer_id:'cust_2',brand:'Rheem',equipment:'Water Heater',model:'XE50T10',serial:'WH-20002',install_date:daysAgo(420),registration_date:daysAgo(418),certificate_url:'',status:'Active',equipment_warranty:'Active',jb_warranty:'Pending',technician:'Jordan',notes:'Demo installation',created_at:isoAt(daysAgo(420),'10:00')}
+      {id:'inst_1',customer_id:'cust_1',brand:'Carrier',equipment:'Heat Pump',model:'24ABC6',serial:'HP-10001',install_date:daysAgo(180),registration_date:daysAgo(179),certificate_url:'',status:'Active',equipment_warranty:'Active',jb_warranty:'Active',technician:'Alex',notes:'',,created_at:isoAt(daysAgo(180),'10:00')},
+      {id:'inst_2',customer_id:'cust_2',brand:'Rheem',equipment:'Water Heater',model:'XE50T10',serial:'WH-20002',install_date:daysAgo(420),registration_date:daysAgo(418),certificate_url:'',status:'Active',equipment_warranty:'Active',jb_warranty:'Pending',technician:'Jordan',notes:'',,created_at:isoAt(daysAgo(420),'10:00')}
     ],
     jb_warranty_clients:[
       {id:'jb_1',customer_id:'cust_3',equipment:'Boiler',model:'B-500',serial:'JB-30003',warranty_start_year:new Date().getFullYear(),warranty_length_years:2,certificate_url:'',status:'Pending',created_at:isoAt(daysAgo(20),'10:00')}
     ],
     warranty_claims:[
-      {id:'war_1',customer_id:'cust_4',job_number:'CB-260824-103',part:'Control board',part_number:'CB-44',brand:'Carrier',failure_date:daysAgo(3),claim_number:'CLM-1001',submitted_to:'Carrier',submitted_date:daysAgo(2),status:'Submitted',part_cost:450,credit_amount:0,technician:'Chris',internal_notes:'Waiting for credit',notes:'Demo claim',created_at:isoAt(daysAgo(2),'12:00')},
-      {id:'war_2',customer_id:'cust_2',job_number:'CB-260823-098',part:'Igniter',part_number:'IG-21',brand:'Rheem',failure_date:daysAgo(10),claim_number:'CLM-0991',submitted_to:'Rheem',submitted_date:daysAgo(8),status:'Credit Received',part_cost:95,credit_amount:95,technician:'Jordan',internal_notes:'Closed',notes:'Demo claim',created_at:isoAt(daysAgo(8),'12:00')}
+      {id:'war_1',customer_id:'cust_4',job_number:'CB-260824-103',part:'Control board',part_number:'CB-44',brand:'Carrier',failure_date:daysAgo(3),claim_number:'CLM-1001',submitted_to:'Carrier',submitted_date:daysAgo(2),status:'Submitted',part_cost:450,credit_amount:0,technician:'Chris',internal_notes:'Waiting for credit',notes:'',created_at:isoAt(daysAgo(2),'12:00')},
+      {id:'war_2',customer_id:'cust_2',job_number:'CB-260823-098',part:'Igniter',part_number:'IG-21',brand:'Rheem',failure_date:daysAgo(10),claim_number:'CLM-0991',submitted_to:'Rheem',submitted_date:daysAgo(8),status:'Credit Received',part_cost:95,credit_amount:95,technician:'Jordan',internal_notes:'Closed',notes:'',created_at:isoAt(daysAgo(8),'12:00')}
     ],
     service_plans:[
       {id:'plan_1',customer_id:'cust_1',plan_type:'Comfort Care',amount:29,billing_frequency:'Monthly',status:'Active',created_at:isoAt(daysAgo(30),'09:00')},
@@ -2139,7 +2139,7 @@
       currentFullName = p.full_name || 'Maricel';
       document.getElementById('auth-screen').style.display = 'none';
       document.getElementById('app').style.display = 'flex';
-      document.getElementById('whoami').textContent = currentFullName + ' · ' + currentRole + (LIVE_DATABASE ? '' : ' · demo');
+      document.getElementById('whoami').textContent = currentFullName + ' · ' + currentRole;
       applyRoleUI();
       populateSuggestionLists();
       updateModeBadge();
@@ -2471,7 +2471,7 @@ SDR HVAC DISPATCH`;
   document.addEventListener('click', e=>{ if(window.innerWidth<=820 && e.target.closest('.nav-item')) document.querySelector('.sidebar')?.classList.remove('open'); });
   function updateModeBadge(){
     const el=document.getElementById('app-mode-badge'); if(!el) return;
-    el.textContent=LIVE_DATABASE?'Live database':'Demo mode';
+    el.textContent='Live database';
   }
 
   async function loadDashboardOverview(){
