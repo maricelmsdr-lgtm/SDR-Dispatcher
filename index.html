@@ -967,19 +967,12 @@
           <button class="btn" onclick="downloadKpiPDF()">⬇ PDF</button>
         </div>
       </div>
-      <div class="callfilter-presets" style="margin-bottom:10px;">
-        <button type="button" class="chip kpi-mode-btn" data-mode="day" onclick="setKpiMode('day')">Daily</button>
-        <button type="button" class="chip kpi-mode-btn active" data-mode="week" onclick="setKpiMode('week')">Weekly</button>
-        <button type="button" class="chip kpi-mode-btn" data-mode="month" onclick="setKpiMode('month')">Monthly</button>
-      </div>
       <div class="callfilter-bar">
-        <button type="button" class="chip" id="kpi-prev-btn" onclick="kpiShiftWindow(-1)"></button>
-        <button type="button" class="chip" id="kpi-next-btn" onclick="kpiShiftWindow(1)"></button>
-        <button type="button" class="chip" id="kpi-today-btn" onclick="kpiJumpToday()"></button>
         <div class="callfilter-range" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
           <label style="display:flex;align-items:center;gap:6px;">From Date
             <input type="date" id="kpi-from-date" onchange="kpiDateRangeChanged()">
           </label>
+          <span>to</span>
           <label style="display:flex;align-items:center;gap:6px;">To Date
             <input type="date" id="kpi-to-date" onchange="kpiDateRangeChanged()">
           </label>
@@ -2038,7 +2031,7 @@ SDR Electric Plumbing & Heating`;
             else if(name === 'serviceplans') await loadServiceplans();
       else if(name === 'invoices') await loadInvoices();
       else if(name === 'report') await loadReport();
-      else if(name === 'kpi'){ updateKpiNavLabels(); await loadKPI(); }
+      else if(name === 'kpi'){ await loadKPI(); }
       else if(name === 'team') await loadTeam();
       else if(name === 'vault'){ await loadVault(); }
     } catch(err){ console.error('loadView error', name, err); }
@@ -2275,7 +2268,11 @@ SDR Electric Plumbing & Heating`;
       await loadDispatch();
       await loadServiceM8DispatchSyncStatus();
     } catch(err){
-      alert('ServiceM8 dispatch sync failed: ' + (err.message || err));
+      const msg = err?.message || String(err);
+      const friendly = /failed to send a request|network|cors|fetch/i.test(msg)
+        ? 'Unable to contact the ServiceM8 sync function. Make sure the servicem8-sync Edge Function was redeployed with the latest version.'
+        : msg;
+      alert('ServiceM8 dispatch sync failed: ' + friendly);
       await loadServiceM8DispatchSyncStatus();
     }
   }
@@ -3148,6 +3145,38 @@ SDR Electric Plumbing & Heating`;
     doc.text(new Date().toLocaleString(), 14, 21);
     doc.autoTable({ head, body, startY: 26, styles: { fontSize: 8 } });
     doc.save(filename);
+  }
+
+  function downloadKpiPDF(){
+    const table = document.getElementById('table-kpi');
+    if(!table) return;
+    const from = document.getElementById('kpi-from-date')?.value || '';
+    const to = document.getElementById('kpi-to-date')?.value || from;
+    const rows = Array.from(table.querySelectorAll('tr')).map(row =>
+      Array.from(row.querySelectorAll('th,td')).map(cell => cell.textContent.replace(/\s+/g, ' ').trim())
+    );
+    if(!rows.length) return alert('There is no KPI report to export yet.');
+    const head = [rows[0]];
+    const body = rows.slice(1);
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ orientation: 'landscape', format: 'a4' });
+    doc.setFontSize(15);
+    doc.text('SDR Dispatcher — KPI Tracking Report', 14, 15);
+    doc.setFontSize(9);
+    doc.text(`From ${from || '—'} to ${to || '—'}`, 14, 21);
+    doc.text(`Generated ${new Date().toLocaleString()}`, 14, 26);
+    doc.autoTable({
+      head,
+      body,
+      startY: 32,
+      styles: { fontSize: 7, cellPadding: 2 },
+      headStyles: { fontSize: 7 },
+      margin: { left: 10, right: 10 },
+      tableWidth: 'auto'
+    });
+    const safeFrom = (from || 'report').replaceAll('-', '');
+    const safeTo = (to || from || 'report').replaceAll('-', '');
+    doc.save(`SDR_KPI_Report_${safeFrom}_to_${safeTo}.pdf`);
   }
 
   function addEquipmentRow(){
@@ -4151,80 +4180,35 @@ SDR Electric Plumbing & Heating`;
     return d.toLocaleDateString('en-US', {month:'short', day:'numeric'});
   }
 
-  let kpiViewMode = 'week'; // 'day' | 'week' | 'month'
-  let kpiAnchorStart = null; // start date of the LAST (rightmost) column; null = follow the current period automatically
+  // KPI Tracking — exact From Date / To Date only.
+  // One column per calendar day in the selected range; no weekly/monthly navigation.
+  const kpiViewMode = 'day';
 
-  function kpiPeriods(mode, n){
-    const anchorEnd = kpiAnchorStart || currentPeriodStart(mode);
-    const list = [];
-    let cursor = anchorEnd;
-    for(let i = 0; i < n; i++){
-      list.unshift(cursor);
-      cursor = shiftPeriod(mode, cursor, -1);
+  function kpiDatePeriods(fromStr, toStr){
+    const periods = [];
+    if(!fromStr || !toStr || fromStr > toStr) return periods;
+    let d = new Date(fromStr + 'T00:00:00');
+    const end = new Date(toStr + 'T00:00:00');
+    while(d <= end){
+      const start = localISODate(d);
+      periods.push({ start, end: start });
+      d.setDate(d.getDate() + 1);
     }
-    return list.map(start => ({ start, end: periodEndFor(mode, start) }));
+    return periods;
   }
 
-  const KPI_MODE_TEXT = {
-    day:   { unit: 'day',   plural: 'days',   sub: 'Daily leading & lagging indicators — auto-calculated where possible, entered manually otherwise', prevNext: KPI_MODE_COUNT.day },
-    week:  { unit: 'week',  plural: 'weeks',  sub: 'Weekly leading & lagging indicators — auto-calculated where possible, entered manually otherwise', prevNext: KPI_MODE_COUNT.week },
-    month: { unit: 'month', plural: 'months', sub: 'Monthly leading & lagging indicators — auto-calculated where possible, entered manually otherwise', prevNext: KPI_MODE_COUNT.month }
-  };
-
-  function updateKpiNavLabels(){
-    const t = KPI_MODE_TEXT[kpiViewMode];
-    document.getElementById('kpi-prev-btn').textContent = `‹ Previous ${t.prevNext} ${t.plural}`;
-    document.getElementById('kpi-next-btn').textContent = `Next ${t.prevNext} ${t.plural} ›`;
-    document.getElementById('kpi-today-btn').textContent = kpiViewMode === 'day' ? 'Today' : `This ${t.unit}`;
-    const subEl = document.getElementById('kpi-sub');
-    if(subEl) subEl.textContent = t.sub;
-  }
-
-  function setKpiMode(mode){
-    if(kpiViewMode === mode) return;
-    kpiViewMode = mode;
-    kpiAnchorStart = null;
-    setKpiDateInputs();
-    document.querySelectorAll('.kpi-mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
-    updateKpiNavLabels();
-    loadKPI();
-  }
-
-  function kpiShift(periodsDelta){
-    const base = kpiAnchorStart || currentPeriodStart(kpiViewMode);
-    const next = shiftPeriod(kpiViewMode, base, periodsDelta);
-    kpiAnchorStart = (next === currentPeriodStart(kpiViewMode)) ? null : next;
-    setKpiDateInputs();
-    loadKPI();
-  }
-
-  function kpiShiftWindow(direction){
-    kpiShift(direction * KPI_MODE_COUNT[kpiViewMode]);
-  }
-
-  function kpiJumpToday(){
-    kpiAnchorStart = null;
-    setKpiDateInputs();
-    loadKPI();
-  }
-
-  function kpiJumpToDate(){
-    const val = document.getElementById('kpi-from-date')?.value;
-    if(!val) return;
-    const target = periodStartFor(kpiViewMode, val);
-    kpiAnchorStart = (target === currentPeriodStart(kpiViewMode)) ? null : target;
-    setKpiDateInputs();
-    loadKPI();
-  }
-
-  function setKpiDateInputs(){
+  function ensureKpiDateInputs(){
     const from = document.getElementById('kpi-from-date');
     const to = document.getElementById('kpi-to-date');
     if(!from || !to) return;
     if(!from.value || !to.value){
-      const periods = kpiPeriods(kpiViewMode, KPI_MODE_COUNT[kpiViewMode]);
-      from.value = periods[0].start;
-      to.value = periods[periods.length - 1].end;
+      const today = new Date();
+      const day = today.getDay();
+      const mondayOffset = day === 0 ? -6 : 1 - day;
+      const monday = new Date(today);
+      monday.setDate(today.getDate() + mondayOffset);
+      from.value = localISODate(monday);
+      to.value = localISODate(today);
     }
   }
 
@@ -4232,7 +4216,10 @@ SDR Electric Plumbing & Heating`;
     const from = document.getElementById('kpi-from-date')?.value;
     const to = document.getElementById('kpi-to-date')?.value;
     if(!from || !to) return;
-    if(from > to){ alert('From Date cannot be after To Date.'); return; }
+    if(from > to){
+      alert('From Date cannot be after To Date.');
+      return;
+    }
     loadKPI();
   }
 
@@ -4240,57 +4227,47 @@ SDR Electric Plumbing & Heating`;
 
   async function loadKPI(){
     const seq = ++kpiLoadSeq;
-    const mode = kpiViewMode;
-    setKpiDateInputs();
-    const selectedFrom = document.getElementById('kpi-from-date')?.value;
-    const selectedTo = document.getElementById('kpi-to-date')?.value;
-    const periods = kpiPeriods(mode, KPI_MODE_COUNT[mode]);
-    const rangeStart = selectedFrom || periods[0].start;
-    const selectedEndDate = selectedTo ? new Date(selectedTo + 'T00:00:00') : new Date(periods[periods.length-1].end + 'T00:00:00');
-    const rangeEnd = (selectedEndDate > new Date() ? localISODate(new Date()) : (selectedTo || periods[periods.length-1].end));
+    ensureKpiDateInputs();
+
+    const selectedFrom = document.getElementById('kpi-from-date')?.value || localISODate(new Date());
+    const selectedTo = document.getElementById('kpi-to-date')?.value || selectedFrom;
+    if(selectedFrom > selectedTo) return;
+
+    const periods = kpiDatePeriods(selectedFrom, selectedTo);
+    const today = localISODate(new Date());
+    const dataTo = selectedTo > today ? today : selectedTo;
 
     const [{ data: calls }, { data: manual }, { data: jobs }, { data: emails }] = await Promise.all([
-      db.from('call_log').select('phone, call_time, outcome').gte('call_time', rangeStart).lte('call_time', rangeEnd + 'T23:59:59'),
-      db.from('kpi_manual_entries').select('*').eq('period_type', mode).gte('week_start', rangeStart).lte('week_start', periods[periods.length-1].start),
-      db.from('jobs').select('technician, scheduled_date, schedule_confidence').gte('scheduled_date', rangeStart).lte('scheduled_date', periods[periods.length-1].end),
-      db.from('email_response_log').select('received_at, responded_at').gte('received_at', rangeStart).lte('received_at', rangeEnd + 'T23:59:59')
+      db.from('call_log').select('phone, call_time, outcome').gte('call_time', selectedFrom).lte('call_time', dataTo + 'T23:59:59'),
+      db.from('kpi_manual_entries').select('*').eq('period_type', 'day').gte('week_start', selectedFrom).lte('week_start', selectedTo),
+      db.from('jobs').select('technician, scheduled_date, schedule_confidence').gte('scheduled_date', selectedFrom).lte('scheduled_date', dataTo),
+      db.from('email_response_log').select('received_at, responded_at').gte('received_at', selectedFrom).lte('received_at', dataTo + 'T23:59:59')
     ]);
-    if(seq !== kpiLoadSeq) return; // a newer request already started — discard this stale result
+
+    if(seq !== kpiLoadSeq) return;
+
     const callRows = calls || [];
     const manualRows = manual || [];
     const jobRows = jobs || [];
     const emailRows = emails || [];
-    const today = localISODate(new Date());
 
     function computeAuto(kpiId, period){
-      const periodCalls = callRows.filter(c => c.call_time >= period.start && c.call_time <= period.end + 'T23:59:59');
+      if(period.start > today) return null;
+      const periodCalls = callRows.filter(c => c.call_time && c.call_time >= period.start && c.call_time <= period.end + 'T23:59:59');
       if(kpiId === 'missed_callback'){
         const missed = periodCalls.filter(c => c.outcome === 'Missed');
         if(!missed.length) return null;
         let returned = 0;
         missed.forEach(m => {
           const mTime = new Date(m.call_time).getTime();
-          const hit = callRows.some(c => c.phone && c.phone === m.phone && c !== m && new Date(c.call_time).getTime() > mTime && new Date(c.call_time).getTime() <= mTime + 30*60*1000);
+          const hit = callRows.some(c => c.phone && m.phone && c.phone === m.phone && c !== m && new Date(c.call_time).getTime() > mTime && new Date(c.call_time).getTime() <= mTime + 30*60*1000);
           if(hit) returned++;
         });
         return returned / missed.length;
       }
-      if(kpiId === 'daily_calls'){
-        const lastDay = period.end < today ? period.end : today;
-        if(period.start > today) return null;
-        let dayCursor = new Date(period.start + 'T00:00:00');
-        const lastDate = new Date(lastDay + 'T00:00:00');
-        let totalDays = 0, coveredDays = 0;
-        while(dayCursor <= lastDate){
-          const dStr = localISODate(dayCursor);
-          totalDays++;
-          if(callRows.some(c => c.call_time.slice(0,10) === dStr)) coveredDays++;
-          dayCursor.setDate(dayCursor.getDate() + 1);
-        }
-        return totalDays ? coveredDays / totalDays : null;
-      }
+      if(kpiId === 'daily_calls') return periodCalls.length ? 1 : 0;
       if(kpiId === 'dispatch_scheduled' || kpiId === 'jobs_confidence'){
-        const periodJobs = jobRows.filter(j => j.scheduled_date >= period.start && j.scheduled_date <= period.end);
+        const periodJobs = jobRows.filter(j => j.scheduled_date === period.start);
         if(!periodJobs.length) return null;
         if(kpiId === 'dispatch_scheduled'){
           const withTech = periodJobs.filter(j => j.technician && j.technician.trim()).length;
@@ -4300,7 +4277,7 @@ SDR Electric Plumbing & Heating`;
         return firmOrTentative / periodJobs.length;
       }
       if(kpiId === 'email_response'){
-        const periodEmails = emailRows.filter(e => e.received_at >= period.start && e.received_at <= period.end + 'T23:59:59');
+        const periodEmails = emailRows.filter(e => e.received_at && e.received_at >= period.start && e.received_at <= period.end + 'T23:59:59');
         if(!periodEmails.length) return null;
         const withinHour = periodEmails.filter(e => e.responded_at && (new Date(e.responded_at).getTime() - new Date(e.received_at).getTime()) <= 60*60*1000).length;
         return withinHour / periodEmails.length;
@@ -4309,7 +4286,7 @@ SDR Electric Plumbing & Heating`;
     }
 
     function manualValue(kpiId, periodStart){
-      const row = manualRows.find(r => r.kpi_id === kpiId && r.week_start === periodStart);
+      const row = manualRows.find(r => String(r.kpi_id) === String(kpiId) && r.week_start === periodStart);
       return row ? row.value : null;
     }
 
@@ -4317,7 +4294,7 @@ SDR Electric Plumbing & Heating`;
       const isFuture = period.start > today;
       if(kpi.auto){
         const v = isFuture ? null : computeAuto(kpi.auto, period);
-        if(v === null) return `<td class="mono" style="text-align:center; color:var(--text-faint);">—</td>`;
+        if(v === null || (kpi.auto === 'daily_calls' && v === 0)) return `<td class="mono" style="text-align:center; color:var(--text-faint);">${kpi.auto === 'daily_calls' && v === 0 ? '0%' : '—'}</td>`;
         const pct = Math.round(v * 100);
         const cls = v >= kpi.target ? 'paid' : (v >= kpi.target * 0.8 ? 'pending' : 'unpaid');
         return `<td style="text-align:center;">${pillSpan(pct + '%', cls)}</td>`;
@@ -4327,7 +4304,7 @@ SDR Electric Plumbing & Heating`;
       return `<td style="text-align:center;"><input type="number" min="0" max="100" step="1" class="kpi-input ${cls}" style="width:60px; text-align:center;" value="${v === null ? '' : Math.round(v*100)}" data-kpi="${kpi.id}" data-period="${period.start}" onchange="saveKpiManual(this)"></td>`;
     }
 
-    const headerCells = periods.map(p => `<th class="mono">${periodLabel(mode, p.start)}</th>`).join('');
+    const headerCells = periods.map(p => `<th class="mono">${new Date(p.start + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric'})}</th>`).join('');
     let html = `<tr><th>Leading &amp; lagging indicator (KPI)</th><th>Target</th>${headerCells}</tr>`;
     KPI_DEFS.forEach(kpi => {
       const rowCells = periods.map(p => cellHtml(kpi, p)).join('');
@@ -4337,65 +4314,16 @@ SDR Electric Plumbing & Heating`;
 
     const labelEl = document.getElementById('kpi-range-label');
     if(labelEl){
-      const startLabel = new Date(periods[0].start + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
-      const endLabel = new Date(periods[periods.length-1].end + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
-      labelEl.textContent = `${startLabel} — ${endLabel}` + (kpiAnchorStart ? '' : ' (current)');
+      const startLabel = new Date(selectedFrom + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+      const endLabel = new Date(selectedTo + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+      labelEl.textContent = `Selected range: ${startLabel} — ${endLabel}`;
     }
-  }
-
-  function downloadKpiPDF(){
-    const table = document.getElementById('table-kpi');
-    if(!table || !table.querySelector('tr')){
-      alert('There is no KPI report to export yet.');
-      return;
-    }
-    if(!window.jspdf || !window.jspdf.jsPDF){
-      alert('PDF export is not available yet. Please refresh the page and try again.');
-      return;
-    }
-
-    const rows = Array.from(table.querySelectorAll('tr')).map(row =>
-      Array.from(row.querySelectorAll('th,td')).map(cell => {
-        const input = cell.querySelector('input');
-        return (input ? input.value + '%' : cell.textContent).replace(/\s+/g, ' ').trim();
-      })
-    );
-    if(!rows.length) return;
-
-    const from = document.getElementById('kpi-from-date')?.value || '';
-    const to = document.getElementById('kpi-to-date')?.value || '';
-    const rangeLabel = from && to ? `${from} to ${to}` : (document.getElementById('kpi-range-label')?.textContent || 'Selected range');
-
-    const { jsPDF } = window.jspdf;
-    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
-    doc.setFontSize(16);
-    doc.text('SDR Dispatcher — KPI Tracking Report', 14, 14);
-    doc.setFontSize(10);
-    doc.text(`Date range: ${rangeLabel}`, 14, 21);
-    doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 27);
-
-    const head = [rows[0]];
-    const body = rows.slice(1);
-    doc.autoTable({
-      head,
-      body,
-      startY: 33,
-      theme: 'grid',
-      styles: { fontSize: 7, cellPadding: 2, valign: 'middle' },
-      headStyles: { fontSize: 7, fontStyle: 'bold' },
-      columnStyles: { 0: { cellWidth: 75 }, 1: { cellWidth: 16 } },
-      margin: { left: 10, right: 10 }
-    });
-
-    const safeFrom = from || 'range';
-    const safeTo = to || 'report';
-    doc.save(`SDR_KPI_Report_${safeFrom}_to_${safeTo}.pdf`);
   }
 
   async function saveKpiManual(input){
     const kpi_id = Number(input.dataset.kpi);
     const week_start = input.dataset.period;
-    const period_type = kpiViewMode;
+    const period_type = 'day';
     const raw = input.value;
     const value = raw === '' ? null : Math.max(0, Math.min(100, Number(raw))) / 100;
     try{
