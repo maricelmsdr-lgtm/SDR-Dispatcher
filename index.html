@@ -2257,53 +2257,51 @@ SDR Electric Plumbing & Heating`;
     }
   }
 
+  async function invokeServiceM8Mode(mode){
+    const url = `${SUPABASE_URL}/functions/v1/servicem8-sync`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`
+      },
+      body: JSON.stringify({ mode })
+    });
+    const text = await res.text();
+    let data = null;
+    try { data = text ? JSON.parse(text) : null; } catch (_) {}
+    if(!res.ok) throw new Error((data && (data.error || data.message)) || `HTTP ${res.status}`);
+    if(data && data.ok === false) throw new Error(data.error || 'ServiceM8 sync failed');
+    return data || {};
+  }
+
   async function syncServiceM8Dispatch(){
     const el = document.getElementById('dispatch-sync-status');
     const btn = document.getElementById('servicem8-sync-btn');
     if(btn){ btn.disabled = true; btn.textContent = '↻ Syncing ServiceM8…'; }
-    if(el) el.textContent = 'ServiceM8: syncing calls + dispatch…';
+    if(el) el.textContent = 'ServiceM8: syncing calls…';
     try{
-      const url = `${SUPABASE_URL}/functions/v1/servicem8-sync`;
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 300000);
-      let res;
-      try{
-        res = await fetch(url, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'apikey': SUPABASE_KEY,
-            'Authorization': `Bearer ${SUPABASE_KEY}`
-          },
-          body: '{}',
-          signal: controller.signal
-        });
-      } finally {
-        clearTimeout(timeout);
-      }
-      const text = await res.text();
-      let data = null;
-      try { data = text ? JSON.parse(text) : null; } catch (_) {}
-      if(!res.ok){
-        throw new Error((data && (data.error || data.message)) || `HTTP ${res.status}`);
-      }
-      if(data && data.ok === false){
-        throw new Error(data.error || 'ServiceM8 sync failed');
-      }
-      const calls = Number(data?.calls_upserted ?? data?.upserted ?? 0);
-      const jobs = Number(data?.jobs_upserted ?? data?.jobs ?? 0);
-      showToast(`ServiceM8 sync complete — ${calls} calls + ${jobs} dispatch jobs`);
+      // Run calls and dispatch separately so either one cannot consume the 150s Edge Function limit.
+      const calls = await invokeServiceM8Mode('calls');
+      if(el) el.textContent = `ServiceM8: calls synced (${Number(calls.calls_upserted || 0)}) — syncing dispatch…`;
+      const dispatch = await invokeServiceM8Mode('dispatch');
+      showToast(`ServiceM8 sync complete — ${Number(calls.calls_upserted || 0)} calls + ${Number(dispatch.jobs_upserted || 0)} dispatch jobs`);
       if(el) el.textContent = `ServiceM8: synced ${new Date().toLocaleString()}`;
       await loadDispatch();
       await loadServiceM8DispatchSyncStatus();
+      // Refresh call-log/dashboard metrics without a full page reload.
+      try{ if(typeof loadCalls === 'function') await loadCalls(); }catch(_){ }
+      try{ if(typeof loadDashboard === 'function') await loadDashboard(); }catch(_){ }
+      try{ if(typeof loadKPI === 'function') await loadKPI(); }catch(_){ }
     } catch(err){
-      const msg = err?.name === 'AbortError' ? 'Sync timed out after 5 minutes.' : (err?.message || String(err));
-      alert('ServiceM8 sync failed: ' + msg);
+      alert('ServiceM8 sync failed: ' + (err?.message || String(err)));
       await loadServiceM8DispatchSyncStatus();
     } finally {
       if(btn){ btn.disabled = false; btn.textContent = '↻ Sync ServiceM8 (Calls + Dispatch)'; }
     }
   }
+
   const debriefFilter = { preset: 'last7', from: null, to: null, search: '' };
 
   async function loadDebriefs(){
