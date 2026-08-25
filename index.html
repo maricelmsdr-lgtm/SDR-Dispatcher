@@ -2265,7 +2265,7 @@ SDR Electric Plumbing & Heating`;
     try{
       const url = `${SUPABASE_URL}/functions/v1/servicem8-sync`;
       const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 120000);
+      const timeout = setTimeout(() => controller.abort(), 300000);
       let res;
       try{
         res = await fetch(url, {
@@ -2297,7 +2297,7 @@ SDR Electric Plumbing & Heating`;
       await loadDispatch();
       await loadServiceM8DispatchSyncStatus();
     } catch(err){
-      const msg = err?.name === 'AbortError' ? 'Sync timed out after 2 minutes.' : (err?.message || String(err));
+      const msg = err?.name === 'AbortError' ? 'Sync timed out after 5 minutes.' : (err?.message || String(err));
       alert('ServiceM8 sync failed: ' + msg);
       await loadServiceM8DispatchSyncStatus();
     } finally {
