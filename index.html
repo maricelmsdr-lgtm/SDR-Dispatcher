@@ -706,7 +706,7 @@
         <div><h2>Call Log Center</h2><div class="module-sub">Inbound and outbound calls, filtered by date range</div></div>
         <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
           <span id="call-sync-status" class="module-sub">ServiceM8: checking…</span>
-          <button class="btn btn-primary" id="servicem8-calls-sync-btn" onclick="syncServiceM8Calls()">↻ Sync ServiceM8 Calls</button>
+          <button class="btn btn-primary" id="servicem8-calls-sync-btn" onclick="syncServiceM8Calls()">↻ Sync Selected Calls</button>
           <button class="btn" onclick="exportCallsCSV()">⬇ CSV</button>
           <button class="btn" onclick="exportCallsPDF()">⬇ PDF</button>
           <button class="btn btn-primary" onclick="openModal('call', true)">+ Log call</button>
@@ -2259,43 +2259,55 @@ SDR Electric Plumbing & Heating`;
     }
   }
 
-  async function invokeServiceM8Mode(mode){
+  async function invokeServiceM8Mode(mode, from=null, to=null){
     const url = `${SUPABASE_URL}/functions/v1/servicem8-sync`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'apikey': SUPABASE_KEY,
-        'Authorization': `Bearer ${SUPABASE_KEY}`
-      },
-      body: JSON.stringify({ mode })
-    });
-    const text = await res.text();
-    let data = null;
-    try { data = text ? JSON.parse(text) : null; } catch (_) {}
-    if(!res.ok) throw new Error((data && (data.error || data.message)) || `HTTP ${res.status}`);
-    if(data && data.ok === false) throw new Error(data.error || 'ServiceM8 sync failed');
-    return data || {};
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 180000);
+    try{
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': SUPABASE_KEY,
+          'Authorization': `Bearer ${SUPABASE_KEY}`
+        },
+        body: JSON.stringify({ mode, from, to }),
+        signal: controller.signal
+      });
+      const text = await res.text();
+      let data = null;
+      try { data = text ? JSON.parse(text) : null; } catch (_) {}
+      if(!res.ok) throw new Error((data && (data.error || data.message)) || `HTTP ${res.status}`);
+      if(data && data.ok === false) throw new Error(data.error || 'ServiceM8 sync failed');
+      return data || {};
+    }finally{
+      clearTimeout(timeout);
+    }
   }
 
   async function syncServiceM8Calls(){
     const el=document.getElementById('call-sync-status');
     const btn=document.getElementById('servicem8-calls-sync-btn');
-    if(btn){btn.disabled=true;btn.textContent='↻ Syncing calls…';}
-    if(el) el.textContent='ServiceM8: syncing calls…';
+    const from=document.getElementById('call-from')?.value || callFilter.from;
+    const to=document.getElementById('call-to')?.value || callFilter.to;
+    if(!from || !to){ alert('Select a From and To date first.'); return; }
+    if(new Date(from) > new Date(to)){ alert('From Date cannot be after To Date.'); return; }
+    if(btn){btn.disabled=true;btn.textContent='↻ Syncing selected calls…';}
+    if(el) el.textContent=`ServiceM8: syncing calls ${from} to ${to}…`;
     try{
-      const data=await invokeServiceM8Mode('calls');
+      const data=await invokeServiceM8Mode('calls', from, to);
       const n=Number(data.calls_upserted ?? data.upserted ?? 0);
-      showToast(`ServiceM8 calls synced — ${n} calls`);
+      showToast(`ServiceM8 calls synced — ${n} calls (${from} to ${to})`);
       if(el) el.textContent=`ServiceM8: ${n} calls synced`;
-      try{ if(typeof loadCalls==='function') await loadCalls(); }catch(_){}
-      try{ if(typeof loadDashboard==='function') await loadDashboard(); }catch(_){}
-      try{ if(typeof loadKPI==='function') await loadKPI(); }catch(_){}
+      await refreshCallLog();
+      try{ if(typeof loadDashboard==='function') await loadDashboard(); }catch(_){ }
+      try{ if(typeof loadKPI==='function') await loadKPI(); }catch(_){ }
     }catch(err){
-      alert('ServiceM8 call sync failed: '+(err?.message||String(err)));
+      const msg=err?.name==='AbortError'?'Call sync timed out.':(err?.message||String(err));
+      alert('ServiceM8 call sync failed: '+msg);
       if(el) el.textContent='ServiceM8: call sync failed';
     }finally{
-      if(btn){btn.disabled=false;btn.textContent='↻ Sync ServiceM8 Calls';}
+      if(btn){btn.disabled=false;btn.textContent='↻ Sync Selected Calls';}
     }
   }
 
