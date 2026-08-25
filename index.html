@@ -706,7 +706,7 @@
         <div><h2>Call Log Center</h2><div class="module-sub">Inbound and outbound calls, filtered by date range</div></div>
         <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
           <span id="call-sync-status" class="module-sub">ServiceM8: checking…</span>
-          <button class="btn btn-primary" id="servicem8-calls-sync-btn" onclick="syncServiceM8Calls()">↻ Sync Selected Calls</button>
+          <button class="btn btn-primary" id="servicem8-calls-sync-btn" onclick="syncServiceM8Calls()">↻ Sync ServiceM8 Call History</button>
           <button class="btn" onclick="exportCallsCSV()">⬇ CSV</button>
           <button class="btn" onclick="exportCallsPDF()">⬇ PDF</button>
           <button class="btn btn-primary" onclick="openModal('call', true)">+ Log call</button>
@@ -2307,7 +2307,7 @@ SDR Electric Plumbing & Heating`;
       alert('ServiceM8 call sync failed: '+msg);
       if(el) el.textContent='ServiceM8: call sync failed';
     }finally{
-      if(btn){btn.disabled=false;btn.textContent='↻ Sync Selected Calls';}
+      if(btn){btn.disabled=false;btn.textContent='↻ Sync ServiceM8 Call History';}
     }
   }
 
