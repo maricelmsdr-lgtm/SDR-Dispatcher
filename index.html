@@ -1698,9 +1698,10 @@
       }
       if(name === 'call'){
         const timeField = document.getElementById('call-time');
-        if(timeField) timeField.value = new Date().toTimeString().slice(0,5);
         const dateField = document.getElementById('call-date');
-        if(dateField) dateField.value = localISODate(new Date());
+        const nowParts = torontoParts();
+        if(timeField) timeField.value = nowParts.time;
+        if(dateField) dateField.value = nowParts.date;
         updateCallPhoneRequirement();
         updateCallDirectionHint();
       }
@@ -1730,8 +1731,33 @@
   function fmtDate(v){
     return v ? new Date(v + 'T00:00:00').toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}) : '—';
   }
+  // SDR Electric's phones (613/905/647) are Ontario, Canada — Eastern Time.
+  // The Call Log always reflects THIS timezone, never whoever's browser is
+  // viewing/entering the data, so a call logged from the Philippines still
+  // lands on the correct Toronto calendar day and clock time.
+  const CALL_LOG_TZ = 'America/Toronto';
   function fmtTime(v){
-    return v ? new Date(v).toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit'}) : '—';
+    return v ? new Date(v).toLocaleTimeString('en-US', {hour:'numeric', minute:'2-digit', timeZone: CALL_LOG_TZ}) : '—';
+  }
+  function fmtCallDate(v){
+    return v ? new Date(v).toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric', timeZone: CALL_LOG_TZ}) : '—';
+  }
+  // 'YYYY-MM-DD' and 'HH:MM' (24h) for `v` (a Date or ISO instant) as seen
+  // on a Toronto wall clock — used to prefill the call date/time inputs.
+  function torontoParts(v){
+    const d = v ? new Date(v) : new Date();
+    const date = new Intl.DateTimeFormat('en-CA', {timeZone: CALL_LOG_TZ, year:'numeric', month:'2-digit', day:'2-digit'}).format(d);
+    const time = new Intl.DateTimeFormat('en-GB', {timeZone: CALL_LOG_TZ, hour:'2-digit', minute:'2-digit', hour12:false}).format(d);
+    return {date, time};
+  }
+  // Converts a Toronto wall-clock date+time (what the dispatcher typed into
+  // the call form) into the correct UTC instant, accounting for DST —
+  // NOT the browser's own timezone offset.
+  function torontoWallTimeToUTC(dateStr, timeStr){
+    const guess = new Date(`${dateStr}T${timeStr}:00Z`);
+    const asToronto = new Date(guess.toLocaleString('en-US', {timeZone: CALL_LOG_TZ}));
+    const diff = guess.getTime() - asToronto.getTime();
+    return new Date(guess.getTime() + diff);
   }
   function fmtTimeStr(hhmm){
     if(!hhmm) return '';
@@ -2738,7 +2764,7 @@ SDR Electric Plumbing & Heating`;
       const statusCls = row.outcome === 'Answered' ? 'paid' : 'unpaid';
       const priority = row.priority || 'Standard';
       const priorityHtml = priority === 'Emergency' ? pillSpan('Emergency','unpaid') : pillSpan('Standard','scheduled');
-      const html = `<tr><td class="mono">${row.call_time ? fmtDate(row.call_time.slice(0,10)) : '—'}</td><td class="mono">${fmtTime(row.call_time)}</td><td>${row.caller||'—'}</td><td class="mono">${row.phone||'—'}</td><td>${row.direction||'—'}</td><td>${priorityHtml}</td><td>${pillSpan(row.outcome, statusCls)}</td><td>${row.handled_by||'—'}</td><td>${row.description||'—'}</td><td${row.note ? ` title="${row.note.replace(/"/g,'&quot;')}"` : ''}>${row.status||'—'}</td><td><button class="btn-icon" onclick="editCall('${row.id}')">Edit</button> <button class="btn-icon" onclick="deleteRow('call_log','${row.id}',refreshCallLog)">Delete</button></td></tr>`;
+      const html = `<tr><td class="mono">${fmtCallDate(row.call_time)}</td><td class="mono">${fmtTime(row.call_time)}</td><td>${row.caller||'—'}</td><td class="mono">${row.phone||'—'}</td><td>${row.direction||'—'}</td><td>${priorityHtml}</td><td>${pillSpan(row.outcome, statusCls)}</td><td>${row.handled_by||'—'}</td><td>${row.description||'—'}</td><td${row.note ? ` title="${row.note.replace(/"/g,'&quot;')}"` : ''}>${row.status||'—'}</td><td><button class="btn-icon" onclick="editCall('${row.id}')">Edit</button> <button class="btn-icon" onclick="deleteRow('call_log','${row.id}',refreshCallLog)">Delete</button></td></tr>`;
       document.getElementById('table-calls').insertAdjacentHTML('beforeend', html);
     });
   }
@@ -3591,12 +3617,14 @@ SDR Electric Plumbing & Heating`;
       return false;
     }
     try{
-      const datePart = dateField.value || localISODate(new Date());
-      // The date+time inputs are always in the browser's local time. Convert
-      // through new Date(...).toISOString() to get a real UTC instant, so
-      // this round-trips correctly no matter what timezone Postgres stores
-      // it in or what timezone whoever's viewing the Call Log is in.
-      const call_time = new Date(`${datePart}T${timeField.value}:00`).toISOString();
+      const datePart = dateField.value || torontoParts().date;
+      // The date+time inputs are always Toronto (Eastern) wall-clock time —
+      // SDR Electric's business timezone — regardless of what timezone the
+      // dispatcher's own browser/device is in. Convert through
+      // torontoWallTimeToUTC (which accounts for DST) to get the correct
+      // UTC instant for storage, so this round-trips correctly no matter
+      // where whoever is viewing the Call Log happens to be sitting.
+      const call_time = torontoWallTimeToUTC(datePart, timeField.value).toISOString();
       const payload = { caller: caller.value, phone: phoneVal || null, call_time, direction: direction.value, outcome: outcome.value, priority: priority.value, handled_by, description: description.value || null, status: status.value || null, note: note.value || null };
       let error;
       if(editState.call){
@@ -3625,13 +3653,13 @@ SDR Electric Plumbing & Heating`;
     document.getElementById('call-status').value = row.status || 'Open';
     document.getElementById('call-note').value = row.note || '';
     if(row.call_time){
-      // Convert the stored UTC instant back to local date/time for editing —
-      // slicing the raw string (the old approach) showed the UTC clock time,
-      // not local time, which is exactly why the edit form used to disagree
-      // with what the Call Log table displayed for the same call.
-      const callDate = new Date(row.call_time);
-      document.getElementById('call-date').value = localISODate(callDate);
-      document.getElementById('call-time').value = callDate.toTimeString().slice(0,5);
+      // Convert the stored UTC instant back to Toronto (Eastern) date/time
+      // for editing — using the browser's own timezone here (the old
+      // approach) is exactly why the edit form used to disagree with what
+      // the Call Log displays, whenever the dispatcher isn't in Ontario.
+      const callParts = torontoParts(row.call_time);
+      document.getElementById('call-date').value = callParts.date;
+      document.getElementById('call-time').value = callParts.time;
     }
     updateCallPhoneRequirement();
     updateCallDirectionHint();
