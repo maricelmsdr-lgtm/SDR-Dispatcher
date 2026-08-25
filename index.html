@@ -1751,13 +1751,26 @@
     return {date, time};
   }
   // Converts a Toronto wall-clock date+time (what the dispatcher typed into
-  // the call form) into the correct UTC instant, accounting for DST —
-  // NOT the browser's own timezone offset.
+  // the call form) into the correct UTC instant, accounting for DST.
+  // Deliberately avoids `new Date(someLocaleString)` — that shortcut parses
+  // the string using the BROWSER's own local timezone, not UTC, so on a
+  // Philippines device it silently mixed in an extra +8h/-4h skew (that's
+  // the bug that turned a 10:36 AM entry into 6:36 PM). Instead we read
+  // Toronto's actual UTC offset directly via Intl.formatToParts.
+  function tzOffsetMs(instant, timeZone){
+    const dtf = new Intl.DateTimeFormat('en-US', {
+      timeZone, hourCycle:'h23',
+      year:'numeric', month:'2-digit', day:'2-digit',
+      hour:'2-digit', minute:'2-digit', second:'2-digit'
+    });
+    const p = dtf.formatToParts(instant).reduce((acc,x)=>{acc[x.type]=x.value; return acc;},{});
+    const asUTC = Date.UTC(+p.year, +p.month-1, +p.day, +p.hour, +p.minute, +p.second);
+    return asUTC - instant.getTime();
+  }
   function torontoWallTimeToUTC(dateStr, timeStr){
     const guess = new Date(`${dateStr}T${timeStr}:00Z`);
-    const asToronto = new Date(guess.toLocaleString('en-US', {timeZone: CALL_LOG_TZ}));
-    const diff = guess.getTime() - asToronto.getTime();
-    return new Date(guess.getTime() + diff);
+    const offset = tzOffsetMs(guess, CALL_LOG_TZ);
+    return new Date(guess.getTime() - offset);
   }
   function fmtTimeStr(hhmm){
     if(!hhmm) return '';
@@ -3604,7 +3617,7 @@ SDR Electric Plumbing & Heating`;
     const description = document.getElementById('call-description');
     const status = document.getElementById('call-status');
     const note = document.getElementById('call-note');
-    const handled_by = outcome.value === 'Missed' ? null : handledBy.value;
+    const handled_by = handledBy.value;
     const phoneVal = phone.value.trim();
     if(outcome.value === 'Missed' && !phoneVal){
       alert('Phone number is required for missed calls — without it, the "Returned Missed Calls" KPI can\'t match a callback to this call.');
