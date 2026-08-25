@@ -642,7 +642,7 @@
         <div><h2>Dispatch board</h2><div class="module-sub">All jobs assigned today, by technician</div></div>
         <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
           <span id="dispatch-sync-status" class="module-sub" style="margin-right:4px;">ServiceM8: checking…</span>
-          <button class="btn btn-primary" id="servicem8-sync-btn" onclick="syncServiceM8Dispatch()">↻ Sync ServiceM8 (Calls + Dispatch)</button>
+          <button class="btn btn-primary" id="servicem8-dispatch-sync-btn" onclick="syncServiceM8Dispatch()">↻ Sync ServiceM8 Dispatch</button>
           <button class="btn" onclick="downloadTableCSV('table-dispatch','jobs_backup.csv')">⬇ CSV</button>
           <button class="btn" onclick="downloadTablePDF('table-dispatch','jobs_backup.pdf','Jobs')">⬇ PDF</button>
           <button class="btn btn-primary" onclick="openModal('dispatch', true)">+ Assign job</button>
@@ -704,7 +704,9 @@
     <div class="view" id="view-calls">
       <div class="module-head">
         <div><h2>Call Log Center</h2><div class="module-sub">Inbound and outbound calls, filtered by date range</div></div>
-        <div style="display:flex; gap:8px;">
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+          <span id="call-sync-status" class="module-sub">ServiceM8: checking…</span>
+          <button class="btn btn-primary" id="servicem8-calls-sync-btn" onclick="syncServiceM8Calls()">↻ Sync ServiceM8 Calls</button>
           <button class="btn" onclick="exportCallsCSV()">⬇ CSV</button>
           <button class="btn" onclick="exportCallsPDF()">⬇ PDF</button>
           <button class="btn btn-primary" onclick="openModal('call', true)">+ Log call</button>
@@ -2276,29 +2278,43 @@ SDR Electric Plumbing & Heating`;
     return data || {};
   }
 
-  async function syncServiceM8Dispatch(){
-    const el = document.getElementById('dispatch-sync-status');
-    const btn = document.getElementById('servicem8-sync-btn');
-    if(btn){ btn.disabled = true; btn.textContent = '↻ Syncing ServiceM8…'; }
-    if(el) el.textContent = 'ServiceM8: syncing calls…';
+  async function syncServiceM8Calls(){
+    const el=document.getElementById('call-sync-status');
+    const btn=document.getElementById('servicem8-calls-sync-btn');
+    if(btn){btn.disabled=true;btn.textContent='↻ Syncing calls…';}
+    if(el) el.textContent='ServiceM8: syncing calls…';
     try{
-      // Run calls and dispatch separately so either one cannot consume the 150s Edge Function limit.
-      const calls = await invokeServiceM8Mode('calls');
-      if(el) el.textContent = `ServiceM8: calls synced (${Number(calls.calls_upserted || 0)}) — syncing dispatch…`;
-      const dispatch = await invokeServiceM8Mode('dispatch');
-      showToast(`ServiceM8 sync complete — ${Number(calls.calls_upserted || 0)} calls + ${Number(dispatch.jobs_upserted || 0)} dispatch jobs`);
-      if(el) el.textContent = `ServiceM8: synced ${new Date().toLocaleString()}`;
+      const data=await invokeServiceM8Mode('calls');
+      const n=Number(data.calls_upserted ?? data.upserted ?? 0);
+      showToast(`ServiceM8 calls synced — ${n} calls`);
+      if(el) el.textContent=`ServiceM8: ${n} calls synced`;
+      try{ if(typeof loadCalls==='function') await loadCalls(); }catch(_){}
+      try{ if(typeof loadDashboard==='function') await loadDashboard(); }catch(_){}
+      try{ if(typeof loadKPI==='function') await loadKPI(); }catch(_){}
+    }catch(err){
+      alert('ServiceM8 call sync failed: '+(err?.message||String(err)));
+      if(el) el.textContent='ServiceM8: call sync failed';
+    }finally{
+      if(btn){btn.disabled=false;btn.textContent='↻ Sync ServiceM8 Calls';}
+    }
+  }
+
+  async function syncServiceM8Dispatch(){
+    const el=document.getElementById('dispatch-sync-status');
+    const btn=document.getElementById('servicem8-dispatch-sync-btn');
+    if(btn){btn.disabled=true;btn.textContent='↻ Syncing dispatch…';}
+    if(el) el.textContent='ServiceM8: syncing dispatch…';
+    try{
+      const data=await invokeServiceM8Mode('dispatch');
+      const n=Number(data.jobs_upserted ?? data.jobs ?? 0);
+      showToast(`ServiceM8 dispatch synced — ${n} jobs`);
+      if(el) el.textContent=`ServiceM8: ${n} dispatch jobs synced`;
       await loadDispatch();
-      await loadServiceM8DispatchSyncStatus();
-      // Refresh call-log/dashboard metrics without a full page reload.
-      try{ if(typeof loadCalls === 'function') await loadCalls(); }catch(_){ }
-      try{ if(typeof loadDashboard === 'function') await loadDashboard(); }catch(_){ }
-      try{ if(typeof loadKPI === 'function') await loadKPI(); }catch(_){ }
-    } catch(err){
-      alert('ServiceM8 sync failed: ' + (err?.message || String(err)));
-      await loadServiceM8DispatchSyncStatus();
-    } finally {
-      if(btn){ btn.disabled = false; btn.textContent = '↻ Sync ServiceM8 (Calls + Dispatch)'; }
+    }catch(err){
+      alert('ServiceM8 dispatch sync failed: '+(err?.message||String(err)));
+      if(el) el.textContent='ServiceM8: dispatch sync failed';
+    }finally{
+      if(btn){btn.disabled=false;btn.textContent='↻ Sync ServiceM8 Dispatch';}
     }
   }
 
