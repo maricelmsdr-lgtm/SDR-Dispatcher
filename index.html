@@ -2671,19 +2671,30 @@ SDR Electric Plumbing & Heating`;
   const callFilter = { preset: 'today', from: null, to: null, search: '', type: 'all' };
   let callsRangeCache = [];
 
+  function shiftDateStr(dateStr, days){
+    const d = new Date(dateStr + 'T12:00:00Z'); // noon UTC anchor avoids any DST edge shifting the calendar date
+    d.setUTCDate(d.getUTCDate() + days);
+    return d.toISOString().slice(0,10);
+  }
+
   function presetRange(preset){
-    const now = new Date();
-    const todayStr = now.toISOString().slice(0,10);
-    const shift = (days) => new Date(now.getTime() + days*24*60*60*1000).toISOString().slice(0,10);
-    if(preset === 'yesterday'){ const y = shift(-1); return { from: y, to: y }; }
-    if(preset === 'last7') return { from: shift(-6), to: todayStr };
+    // "Today" must mean Toronto's today, not the browser's — otherwise
+    // every preset button silently drifts by ~12-13h for anyone viewing
+    // from outside Eastern Time.
+    const todayStr = torontoParts().date;
+    if(preset === 'yesterday'){ const y = shiftDateStr(todayStr, -1); return { from: y, to: y }; }
+    if(preset === 'last7') return { from: shiftDateStr(todayStr, -6), to: todayStr };
     if(preset === 'thismonth'){
-      return { from: new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0,10), to: todayStr };
+      const [y, m] = todayStr.split('-');
+      return { from: `${y}-${m}-01`, to: todayStr };
     }
     if(preset === 'lastmonth'){
-      const firstLast = new Date(now.getFullYear(), now.getMonth()-1, 1);
-      const lastLast = new Date(now.getFullYear(), now.getMonth(), 0);
-      return { from: firstLast.toISOString().slice(0,10), to: lastLast.toISOString().slice(0,10) };
+      let [y, m] = todayStr.split('-').map(Number);
+      m -= 1;
+      if(m < 1){ m = 12; y -= 1; }
+      const mm = String(m).padStart(2,'0');
+      const lastDay = new Date(Date.UTC(y, m, 0)).getUTCDate();
+      return { from: `${y}-${mm}-01`, to: `${y}-${mm}-${String(lastDay).padStart(2,'0')}` };
     }
     return { from: todayStr, to: todayStr }; // today (default)
   }
@@ -2750,8 +2761,12 @@ SDR Electric Plumbing & Heating`;
     const fromEl = document.getElementById('call-from'), toEl = document.getElementById('call-to');
     if(fromEl) fromEl.value = callFilter.from;
     if(toEl) toEl.value = callFilter.to;
-    const fromISO = new Date(callFilter.from + 'T00:00:00').toISOString();
-    const toISO = new Date(callFilter.to + 'T23:59:59.999').toISOString();
+    // callFilter.from/to are Toronto calendar dates (e.g. from the date
+    // pickers or a preset) — anchor the query window to Toronto midnight,
+    // not the browser's local midnight, or a day at the edges gets clipped
+    // for anyone not physically in Eastern Time.
+    const fromISO = torontoWallTimeToUTC(callFilter.from, '00:00').toISOString();
+    const toISO = new Date(torontoWallTimeToUTC(callFilter.to, '23:59').getTime() + 59999).toISOString();
 
     const [callsRes, jobsRes, callbacksRes] = await Promise.all([
       db.from('call_log').select('*').gte('call_time', fromISO).lte('call_time', toISO).order('call_time', {ascending:false}),
