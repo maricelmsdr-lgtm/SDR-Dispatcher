@@ -1700,7 +1700,7 @@
         const timeField = document.getElementById('call-time');
         if(timeField) timeField.value = new Date().toTimeString().slice(0,5);
         const dateField = document.getElementById('call-date');
-        if(dateField) dateField.value = new Date().toISOString().slice(0,10);
+        if(dateField) dateField.value = localISODate(new Date());
         updateCallPhoneRequirement();
         updateCallDirectionHint();
       }
@@ -3591,8 +3591,12 @@ SDR Electric Plumbing & Heating`;
       return false;
     }
     try{
-      const datePart = dateField.value || new Date().toISOString().slice(0,10);
-      const call_time = `${datePart}T${timeField.value}:00`;
+      const datePart = dateField.value || localISODate(new Date());
+      // The date+time inputs are always in the browser's local time. Convert
+      // through new Date(...).toISOString() to get a real UTC instant, so
+      // this round-trips correctly no matter what timezone Postgres stores
+      // it in or what timezone whoever's viewing the Call Log is in.
+      const call_time = new Date(`${datePart}T${timeField.value}:00`).toISOString();
       const payload = { caller: caller.value, phone: phoneVal || null, call_time, direction: direction.value, outcome: outcome.value, priority: priority.value, handled_by, description: description.value || null, status: status.value || null, note: note.value || null };
       let error;
       if(editState.call){
@@ -3621,8 +3625,13 @@ SDR Electric Plumbing & Heating`;
     document.getElementById('call-status').value = row.status || 'Open';
     document.getElementById('call-note').value = row.note || '';
     if(row.call_time){
-      document.getElementById('call-date').value = row.call_time.slice(0,10);
-      document.getElementById('call-time').value = row.call_time.slice(11,16);
+      // Convert the stored UTC instant back to local date/time for editing —
+      // slicing the raw string (the old approach) showed the UTC clock time,
+      // not local time, which is exactly why the edit form used to disagree
+      // with what the Call Log table displayed for the same call.
+      const callDate = new Date(row.call_time);
+      document.getElementById('call-date').value = localISODate(callDate);
+      document.getElementById('call-time').value = callDate.toTimeString().slice(0,5);
     }
     updateCallPhoneRequirement();
     updateCallDirectionHint();
