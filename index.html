@@ -580,7 +580,7 @@
       <li class="nav-item" data-view="callbacks"><span class="dot"></span>Callbacks</li>
       <li class="nav-item" data-view="equipmentjb"><span class="dot"></span>Equipment &amp; JB Warranty</li>
       <li class="nav-item" data-view="warranty"><span class="dot"></span>Parts Warranty</li>
-      
+      <li class="nav-item" data-view="partsneeded"><span class="dot"></span>Parts to Order</li>
       <li class="nav-item" data-view="serviceplans"><span class="dot"></span>Service plans</li>
       <li class="nav-item" data-view="invoices"><span class="dot"></span>Invoices</li>
       <li class="nav-item" data-view="report"><span class="dot"></span>Daily report</li>
@@ -610,13 +610,14 @@
         </div>
       </div>
 
-      <div class="stat-grid">
+      <div class="stat-grid" style="grid-template-columns:repeat(8,1fr);">
         <div class="stat"><div class="stat-label">Jobs</div><div class="stat-value" id="dash-jobs">—</div></div>
         <div class="stat"><div class="stat-label">Technicians</div><div class="stat-value" id="dash-technicians">—</div></div>
         <div class="stat"><div class="stat-label">Calls</div><div class="stat-value" id="dash-calls">—</div></div>
         <div class="stat"><div class="stat-label">New leads</div><div class="stat-value" id="dash-leads">—</div></div>
         <div class="stat warn"><div class="stat-label">Pending</div><div class="stat-value" id="dash-pending">—</div></div>
         <div class="stat warn"><div class="stat-label">Parts warranty open</div><div class="stat-value" id="dash-warranty">—</div></div>
+        <div class="stat warn"><div class="stat-label">Parts to order</div><div class="stat-value" id="dash-parts-needed">—</div></div>
         <div class="stat warn"><div class="stat-label">Unpaid invoices</div><div class="stat-value" id="dash-unpaid">—</div></div>
       </div>
 
@@ -627,6 +628,7 @@
         <div class="attn-row" onclick="goTo('leads')"><span class="n" id="dash-attn-leads-n">0</span><span class="lbl">leads need callbacks</span><span class="go">view →</span></div>
         <div class="attn-row" id="dash-attn-debrief-row" onclick="goTo('debriefs')" style="display:none;"><span class="n" id="dash-attn-debrief-n">0</span><span class="lbl" id="dash-attn-debrief-lbl">technician debrief missing</span><span class="go">view →</span></div>
         <div class="attn-row" onclick="goTo('warranty')"><span class="n" id="dash-attn-warranty-n">0</span><span class="lbl">warranty items pending</span><span class="go">view →</span></div>
+        <div class="attn-row" id="dash-attn-parts-row" onclick="goTo('partsneeded')" style="display:none;"><span class="n" id="dash-attn-parts-n">0</span><span class="lbl">parts still need to be ordered</span><span class="go">view →</span></div>
       </div>
 
       <div class="section-title">Today's dispatch</div>
@@ -847,6 +849,37 @@
       <div class="table-scroll">
 <table class="data" id="table-warranty">
         <tr><th>Customer</th><th>Job #</th><th>Part</th><th>Part #</th><th>Manufacturer</th><th>Failure date</th><th>Claim #</th><th>Submitted to</th><th>Status</th><th>Part cost</th><th>Credit amount</th><th>Photos</th><th>Actions</th></tr>
+      </table>
+      </div>
+    </div>
+
+    <!-- ============ PARTS TO ORDER ============ -->
+    <div class="view" id="view-partsneeded">
+      <div class="module-head">
+        <div><h2>Parts to Order</h2><div class="module-sub">Jobs waiting on a part to be ordered, in transit, or ready to install</div></div>
+        <div style="display:flex; gap:8px;">
+          <button class="btn" onclick="downloadTableCSV('table-partsneeded','parts_to_order_backup.csv')">⬇ CSV</button>
+          <button class="btn" onclick="downloadTablePDF('table-partsneeded','parts_to_order_backup.pdf','Parts to Order')">⬇ PDF</button>
+          <button class="btn btn-primary" onclick="openModal('partsneeded', true)">+ Add part needed</button>
+        </div>
+      </div>
+      <div class="callfilter-bar" id="partsneeded-presets">
+        <button type="button" class="chip active" data-preset="open" onclick="setPartsNeededPreset('open')">Open (not installed)</button>
+        <button type="button" class="chip" data-preset="all" onclick="setPartsNeededPreset('all')">All</button>
+        <button type="button" class="chip" data-preset="Needed" onclick="setPartsNeededPreset('Needed')">Needed</button>
+        <button type="button" class="chip" data-preset="Ordered" onclick="setPartsNeededPreset('Ordered')">Ordered</button>
+        <button type="button" class="chip" data-preset="Backordered" onclick="setPartsNeededPreset('Backordered')">Backordered</button>
+        <button type="button" class="chip" data-preset="Received" onclick="setPartsNeededPreset('Received')">Received</button>
+        <button type="button" class="chip" data-preset="Installed" onclick="setPartsNeededPreset('Installed')">Installed</button>
+      </div>
+      <div class="callfilter-bar">
+        <input type="text" id="partsneeded-search" class="callfilter-search" style="margin-left:0; flex:1;" placeholder="Search customer, job #, part, part #, supplier…" oninput="filterPartsNeeded()">
+        <button type="button" class="btn" onclick="filterPartsNeeded()">Search</button>
+        <button type="button" class="btn" onclick="clearPartsNeededSearch()">Clear</button>
+      </div>
+      <div class="table-scroll">
+<table class="data" id="table-partsneeded">
+        <tr><th>Job #</th><th>Customer</th><th>Technician</th><th>Part needed</th><th>Part #</th><th>Supplier</th><th>Qty</th><th>Date needed</th><th>Date ordered</th><th>Expected</th><th>Cost</th><th>Status</th><th>Notes</th><th>Actions</th></tr>
       </table>
       </div>
     </div>
@@ -1142,6 +1175,47 @@
       <div class="modal-actions">
         <button type="button" class="btn" onclick="closeModal('warranty')">Cancel</button>
         <button type="submit" class="btn btn-primary" data-add-label="Log parts claim">Log parts claim</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="modal-partsneeded">
+  <div class="modal">
+    <div class="modal-head"><h3 data-add-label="Add part needed">Add part needed</h3><button class="modal-close" onclick="closeModal('partsneeded')">&times;</button></div>
+    <form onsubmit="return submitPartsNeeded(event)">
+      <div class="field-row">
+        <div class="field"><label>Customer name</label><input type="text" id="partsneeded-customer" required></div>
+        <div class="field"><label>Job #</label><input type="text" id="partsneeded-job" placeholder="#1029"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Technician</label>
+          <input type="text" id="partsneeded-tech-input" list="tech-list" placeholder="Type or select technician">
+        </div>
+        <div class="field"><label>Quantity</label><input type="number" id="partsneeded-qty" min="1" value="1"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Part needed</label><input type="text" id="partsneeded-part" placeholder="e.g. Condenser fan motor" required></div>
+        <div class="field"><label>Part number</label><input type="text" id="partsneeded-partnumber" placeholder="Manufacturer part #"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Supplier</label><input type="text" id="partsneeded-supplier" placeholder="Where it's being ordered from"></div>
+        <div class="field"><label>Cost ($)</label><input type="number" step="0.01" min="0" placeholder="0.00" id="partsneeded-cost"></div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Date needed by</label><input type="date" id="partsneeded-date-needed"></div>
+        <div class="field"><label>Status</label>
+          <select id="partsneeded-status" onchange="updatePartsNeededDateHint()"><option>Needed</option><option>Ordered</option><option>Backordered</option><option>Received</option><option>Installed</option></select>
+        </div>
+      </div>
+      <div class="field-row">
+        <div class="field"><label>Date ordered</label><input type="date" id="partsneeded-date-ordered"></div>
+        <div class="field"><label>Expected / received date</label><input type="date" id="partsneeded-date-expected"></div>
+      </div>
+      <div class="field"><label>Notes</label><textarea id="partsneeded-notes" placeholder="Order confirmation #, tracking info, follow-ups..."></textarea></div>
+      <div class="modal-actions">
+        <button type="button" class="btn" onclick="closeModal('partsneeded')">Cancel</button>
+        <button type="submit" class="btn btn-primary" data-add-label="Save part needed">Save part needed</button>
       </div>
     </form>
   </div>
@@ -1709,6 +1783,10 @@
         const dateField = document.getElementById('dispatch-scheduled-date');
         if(dateField) dateField.value = new Date().toISOString().slice(0,10);
       }
+      if(name === 'partsneeded'){
+        const dateField = document.getElementById('partsneeded-date-needed');
+        if(dateField) dateField.value = new Date().toISOString().slice(0,10);
+      }
     }
     document.getElementById('modal-' + name).classList.add('active');
   }
@@ -2071,6 +2149,7 @@ SDR Electric Plumbing & Heating`;
       else if(name === 'callbacks') await loadCallbacks();
       else if(name === 'equipmentjb') await loadEquipmentJb();
       else if(name === 'warranty') await loadWarranty();
+      else if(name === 'partsneeded') await loadPartsNeeded();
             else if(name === 'serviceplans') await loadServiceplans();
       else if(name === 'invoices') await loadInvoices();
       else if(name === 'report') await loadReport();
@@ -2214,18 +2293,20 @@ SDR Electric Plumbing & Heating`;
     const who = currentFullName || currentUserEmail || '';
     document.getElementById('dash-date').textContent = dateLabel + (who ? ' — dispatcher: ' + who : '');
 
-    const [jobsRes, callsRes, leadsRes, warrantyRes, debriefsRes] = await Promise.all([
+    const [jobsRes, callsRes, leadsRes, warrantyRes, debriefsRes, partsNeededRes] = await Promise.all([
       db.from('jobs').select('*, customers(first_name,last_name)'),
       db.from('call_log').select('outcome'),
       db.from('leads').select('status'),
       db.from('warranty_claims').select('status'),
-      db.from('tech_debriefs').select('technician, debrief_date')
+      db.from('tech_debriefs').select('technician, debrief_date'),
+      db.from('parts_needed').select('status')
     ]);
     const jobs = jobsRes.data || [];
     const calls = callsRes.data || [];
     const leads = leadsRes.data || [];
     const warranty = warrantyRes.data || [];
     const debriefs = debriefsRes.data || [];
+    const partsNeededRows = partsNeededRes.data || [];
 
     const technicians = Array.from(new Set(jobs.map(j => j.technician).filter(Boolean)));
     const todaysJobs = jobs.filter(j => j.scheduled_date === today);
@@ -2235,6 +2316,7 @@ SDR Electric Plumbing & Heating`;
     const warrantyPending = warranty.filter(w => !['Credit Received','Closed','Denied'].includes(w.status)).length;
     const unpaidInvoices = jobs.filter(j => Number(j.invoice_amount) > 0 && ['Unpaid','For Follow-up'].includes(j.invoice_status)).length;
     const todaysFollowUp = todaysJobs.filter(j => j.status !== 'Completed').length;
+    const partsNeededOpen = partsNeededRows.filter(p => p.status !== 'Installed').length;
 
     document.getElementById('dash-jobs').textContent = jobs.length;
     document.getElementById('dash-technicians').textContent = technicians.length;
@@ -2242,12 +2324,20 @@ SDR Electric Plumbing & Heating`;
     document.getElementById('dash-leads').textContent = leads.length;
     document.getElementById('dash-pending').textContent = jobsPending;
     document.getElementById('dash-warranty').textContent = warrantyPending;
+    document.getElementById('dash-parts-needed').textContent = partsNeededOpen;
     document.getElementById('dash-unpaid').textContent = unpaidInvoices;
 
     document.getElementById('dash-attn-jobs-n').textContent = todaysFollowUp;
     document.getElementById('dash-attn-calls-n').textContent = missedCalls;
     document.getElementById('dash-attn-leads-n').textContent = leadsNeedCallback;
     document.getElementById('dash-attn-warranty-n').textContent = warrantyPending;
+    const partsRow = document.getElementById('dash-attn-parts-row');
+    if(partsNeededOpen > 0){
+      partsRow.style.display = '';
+      document.getElementById('dash-attn-parts-n').textContent = partsNeededOpen;
+    } else {
+      partsRow.style.display = 'none';
+    }
 
     const debriefsToday = new Set(debriefs.filter(d => d.debrief_date === today).map(d => d.technician));
     const missingDebriefTechs = technicians.filter(t => todaysJobs.some(j => j.technician === t) && !debriefsToday.has(t));
@@ -3073,6 +3163,140 @@ SDR Electric Plumbing & Heating`;
   function removeWarrantyPhoto(index){
     warrantyEditingPhotoUrls.splice(index, 1);
     renderWarrantyExistingPhotos();
+  }
+
+  // ---------- PARTS TO ORDER ----------
+  const partsNeededFilter = { preset: 'open', search: '' };
+
+  function partsNeededStatusPill(v){
+    const cls = {'Needed':'unpaid','Ordered':'pending','Backordered':'unpaid','Received':'enroute','Installed':'paid'}[v] || 'unpaid';
+    return pillSpan(v || 'Needed', cls);
+  }
+
+  async function loadPartsNeeded(){
+    const { data, error } = await db.from('parts_needed').select('*, customers(first_name,last_name)').order('created_at', {ascending:false});
+    if(error){
+      if(/relation .*parts_needed.* does not exist/i.test(error.message||'')){
+        document.getElementById('table-partsneeded').innerHTML = '<tr><th>Job #</th><th>Customer</th><th>Technician</th><th>Part needed</th><th>Part #</th><th>Supplier</th><th>Qty</th><th>Date needed</th><th>Date ordered</th><th>Expected</th><th>Cost</th><th>Status</th><th>Notes</th><th>Actions</th></tr><tr><td colspan="14" style="text-align:center; color:var(--text-faint); padding:20px;">One-time setup needed: the "parts_needed" table doesn\'t exist in your Supabase project yet. Ask for the setup SQL and run it once in the Supabase SQL editor.</td></tr>';
+        return;
+      }
+      console.error(error);
+      return;
+    }
+    rowCache.partsneeded = data || [];
+    renderPartsNeeded();
+  }
+
+  function renderPartsNeeded(){
+    clearRows('table-partsneeded');
+    const q = partsNeededFilter.search.trim().toLowerCase();
+    const rows = (rowCache.partsneeded || []).filter(row => {
+      if(partsNeededFilter.preset === 'open' && row.status === 'Installed') return false;
+      if(!['all','open'].includes(partsNeededFilter.preset) && row.status !== partsNeededFilter.preset) return false;
+      if(!q) return true;
+      const haystack = [custName(row), row.job_number, row.part, row.part_number, row.supplier, row.technician, row.notes].filter(Boolean).join(' ').toLowerCase();
+      return haystack.includes(q);
+    });
+    if(!rows.length){
+      document.getElementById('table-partsneeded').insertAdjacentHTML('beforeend', `<tr><td colspan="14" style="text-align:center; color:var(--text-faint); padding:20px;">No matching parts needed.</td></tr>`);
+      return;
+    }
+    rows.forEach(row => {
+      const html = `<tr><td class="mono">${row.job_number||'—'}</td><td>${custName(row)}</td><td>${row.technician||'—'}</td><td>${row.part||'—'}</td><td class="mono">${row.part_number||'—'}</td><td>${row.supplier||'—'}</td><td class="mono">${row.quantity ?? 1}</td><td class="mono">${fmtDate(row.date_needed)}</td><td class="mono">${fmtDate(row.date_ordered)}</td><td class="mono">${fmtDate(row.date_expected)}</td><td class="mono">${row.cost != null ? '$'+Number(row.cost).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}) : '—'}</td><td>${partsNeededStatusPill(row.status)}</td><td>${row.notes||'—'}</td><td><button class="btn-icon" onclick="editPartsNeeded('${row.id}')">Edit</button> <button class="btn-icon" onclick="deleteRow('parts_needed','${row.id}',loadPartsNeeded)">Delete</button></td></tr>`;
+      document.getElementById('table-partsneeded').insertAdjacentHTML('beforeend', html);
+    });
+  }
+
+  function setPartsNeededPreset(preset){
+    partsNeededFilter.preset = preset;
+    document.querySelectorAll('#partsneeded-presets .chip').forEach(b => b.classList.toggle('active', b.dataset.preset === preset));
+    renderPartsNeeded();
+  }
+
+  function filterPartsNeeded(){
+    partsNeededFilter.search = document.getElementById('partsneeded-search').value;
+    renderPartsNeeded();
+  }
+
+  function clearPartsNeededSearch(){
+    document.getElementById('partsneeded-search').value = '';
+    partsNeededFilter.search = '';
+    renderPartsNeeded();
+  }
+
+  // Nudges the "Expected / received date" toward today when someone marks a
+  // part Received — a small convenience, not a hard requirement.
+  function updatePartsNeededDateHint(){
+    const status = document.getElementById('partsneeded-status');
+    const expected = document.getElementById('partsneeded-date-expected');
+    if(status && expected && status.value === 'Received' && !expected.value){
+      expected.value = new Date().toISOString().slice(0,10);
+    }
+  }
+
+  async function submitPartsNeeded(e){
+    e.preventDefault();
+    const f = e.target;
+    const customer = document.getElementById('partsneeded-customer');
+    const part = document.getElementById('partsneeded-part');
+    const status = document.getElementById('partsneeded-status');
+    try{
+      const customer_id = await findOrCreateCustomer(customer.value);
+      const cost_raw = document.getElementById('partsneeded-cost').value;
+      const qty_raw = document.getElementById('partsneeded-qty').value;
+      const payload = {
+        customer_id,
+        job_number: document.getElementById('partsneeded-job').value || null,
+        technician: document.getElementById('partsneeded-tech-input').value || null,
+        part: part.value,
+        part_number: document.getElementById('partsneeded-partnumber').value || null,
+        supplier: document.getElementById('partsneeded-supplier').value || null,
+        quantity: qty_raw !== '' ? parseInt(qty_raw) : 1,
+        cost: cost_raw !== '' ? parseFloat(cost_raw) : null,
+        date_needed: document.getElementById('partsneeded-date-needed').value || null,
+        date_ordered: document.getElementById('partsneeded-date-ordered').value || null,
+        date_expected: document.getElementById('partsneeded-date-expected').value || null,
+        status: status.value,
+        notes: document.getElementById('partsneeded-notes').value || null
+      };
+      let error;
+      if(editState.partsneeded){
+        ({ error } = await db.from('parts_needed').update(payload).eq('id', editState.partsneeded));
+      } else {
+        ({ error } = await db.from('parts_needed').insert(payload));
+      }
+      if(error){
+        if(/relation .*parts_needed.* does not exist/i.test(error.message||'')) throw new Error('Your Supabase database needs a "parts_needed" table. Ask for the setup SQL and run it once in the Supabase SQL editor, then save again.');
+        throw error;
+      }
+      editState.partsneeded = null;
+      f.reset(); closeModal('partsneeded'); showToast('Part needed saved'); await loadPartsNeeded();
+    } catch(err){ alert(err.message); }
+    return false;
+  }
+
+  function editPartsNeeded(id){
+    const row = findCached('partsneeded', id);
+    if(!row) return;
+    editState.partsneeded = id;
+    document.getElementById('partsneeded-customer').value = custName(row);
+    document.getElementById('partsneeded-job').value = row.job_number || '';
+    document.getElementById('partsneeded-tech-input').value = row.technician || '';
+    document.getElementById('partsneeded-qty').value = row.quantity ?? 1;
+    document.getElementById('partsneeded-part').value = row.part || '';
+    document.getElementById('partsneeded-partnumber').value = row.part_number || '';
+    document.getElementById('partsneeded-supplier').value = row.supplier || '';
+    document.getElementById('partsneeded-cost').value = row.cost ?? '';
+    document.getElementById('partsneeded-date-needed').value = row.date_needed || '';
+    document.getElementById('partsneeded-date-ordered').value = row.date_ordered || '';
+    document.getElementById('partsneeded-date-expected').value = row.date_expected || '';
+    document.getElementById('partsneeded-status').value = row.status || 'Needed';
+    document.getElementById('partsneeded-notes').value = row.notes || '';
+    const h3 = document.querySelector('#modal-partsneeded .modal-head h3');
+    if(h3) h3.textContent = 'Edit part needed';
+    const btn = document.querySelector('#modal-partsneeded button[type=submit]');
+    if(btn) btn.textContent = 'Save changes';
+    openModal('partsneeded');
   }
 
   async function loadJbwarranty(){
